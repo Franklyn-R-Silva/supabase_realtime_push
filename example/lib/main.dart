@@ -45,7 +45,14 @@ class _PushDemoState extends State<PushDemo> {
   void initState() {
     super.initState();
     if (!_configured || !SupabaseRealtimePush.isSupported) return;
-    _supabase.auth.onAuthStateChange.listen((_) => _refresh());
+    _supabase.auth.onAuthStateChange.listen((state) async {
+      // Also covers sessions that end without the button (revoked, password
+      // changed): the next person on this phone must not get these.
+      if (state.event == AuthChangeEvent.signedOut) {
+        await SupabaseRealtimePush.stop(forgetDevice: true);
+      }
+      await _refresh();
+    });
     SupabaseRealtimePush.taps.listen(_showTap);
     SupabaseRealtimePush.launchTap().then((tap) {
       if (tap != null) _showTap(tap);
