@@ -20,7 +20,6 @@ import androidx.core.content.ContextCompat
 import okhttp3.OkHttpClient
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Holds the Realtime connection with the app closed and keeps the shade equal to the
@@ -71,7 +70,7 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
     private lateinit var http: OkHttpClient
     private lateinit var wakeLock: PowerManager.WakeLock
     private val fetcher = Executors.newSingleThreadExecutor()
-    private val fetchQueued = AtomicBoolean(false)
+    private val funnel = FetchFunnel()
 
     @Volatile private var config: Config? = null
 
@@ -246,23 +245,28 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         (getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(watchIntent())
     }
 
-    // Snapshot: one fetch running and at most one waiting, so a burst of signals is two reads.
+    // Snapshot: signals and joins go through the funnel, one fetch running and one waiting.
 
     private fun requestSnapshot() {
-        if (fetchQueued.getAndSet(true)) return
+        if (!funnel.request()) return
         try {
             fetcher.execute {
-                fetchQueued.set(false)
                 wakeLock.acquire(WAKE_MS)
                 try {
-                    fetchOnce()
+                    do {
+                        // An escaped exception would crash the app and leave the funnel shut for good.
+                        try {
+                            fetchOnce()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "snapshot not applied: ${e.javaClass.simpleName}")
+                        }
+                    } while (funnel.done())
                 } finally {
                     if (wakeLock.isHeld) wakeLock.release()
                 }
             }
         } catch (e: Exception) {
             // The executor is shut down: the service is going away.
-            fetchQueued.set(false)
         }
     }
 
