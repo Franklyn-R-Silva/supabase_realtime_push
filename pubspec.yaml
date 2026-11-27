@@ -22,8 +22,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # Kept until the Dart API PR replaces the generated template code.
-  plugin_platform_interface: ^2.0.2
 
 dev_dependencies:
   flutter_test:
