@@ -225,9 +225,13 @@ abstract final class SupabaseRealtimePush {
         false;
   }
 
-  /// Opens the system dialog that asks for the battery-optimization
-  /// exemption. Google Play allows this permission only for some app types,
-  /// messaging without FCM among them; check the policy for yours.
+  /// Asks the user to exempt the app from battery optimization.
+  ///
+  /// Opens the one-tap system dialog when your app's manifest declares
+  /// `android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, and the
+  /// battery-optimization settings list otherwise. The plugin does not declare
+  /// that permission for you: Google Play accepts it only from apps that cannot
+  /// use FCM.
   static Future<void> requestIgnoreBatteryOptimizations() async {
     if (!isSupported) return;
     await _channel.invokeMethod<void>('requestIgnoreBatteryOptimizations');
