@@ -21,9 +21,17 @@ flutter analyze --fatal-infos
 flutter test
 # Kotlin unit tests (from example/android, after `flutter build apk --config-only` in example/)
 ./gradlew :supabase_realtime_push:testDebugUnitTest
+# SQL tests on a throwaway Postgres (needs Docker)
+tool/test_sql.sh
 ```
 
 CI runs the same checks on every PR.
+
+## Tests
+
+Every change in behaviour comes with a test that fails without it: Dart in
+`test/`, Kotlin in `android/src/test/`, SQL in `supabase/test/`. A bug fix
+starts with the test that shows the bug.
 
 ## Commits and PR titles
 

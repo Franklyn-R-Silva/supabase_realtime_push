@@ -26,14 +26,8 @@ notification that stays.
 > **Status: work in progress, not published yet.** The design is in
 > [docs/contract.md](docs/contract.md).
 
-- No Google Play services, no FCM project, no `google-services.json`. Built
-  for phones without Google services and for company fleets that keep Google
-  out. If your users all have Play services and you ship on Play, FCM is the
-  better tool: it shares one connection among all apps.
-- Works with Supabase Cloud and with self-hosted Supabase.
-- Nothing is lost when the connection drops: every reconnect fetches the full
-  list again.
-- A notification read on another device disappears on this one.
+Works with Supabase Cloud and with self-hosted Supabase. No FCM project and no
+`google-services.json`.
 
 ## How it works
 
@@ -280,6 +274,12 @@ Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
   reconnects at once.
 - The topic must be public: projects that disabled public Realtime channels
   cannot use this package.
+
+## Feedback and contributing
+
+- Bugs and ideas: [open an issue](https://github.com/Franklyn-R-Silva/supabase_realtime_push/issues).
+- Code: see [CONTRIBUTING.md](CONTRIBUTING.md).
+- Security problems: do not open an issue, see [SECURITY.md](SECURITY.md).
 
 ## License
 
