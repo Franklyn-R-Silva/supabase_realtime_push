@@ -52,6 +52,8 @@ one, and the database needs no queue.
 - At most one snapshot fetch runs and at most one waits. A signal or join that
   arrives during a fetch only marks the waiting one, so 500 signals from one
   bulk insert cost two fetches, not 500.
+- A refused join, or a `phx_close` or `phx_error` on the topic while the
+  socket is up, counts as a drop: close the socket and reconnect.
 - Reconnect backoff: 1, 2, 5, 10, 30 s, then every 30 s, each wait multiplied
   by a random factor between 0.5 and 1.5.
 - Supabase Cloud closes a public Realtime connection after at most 24 hours.

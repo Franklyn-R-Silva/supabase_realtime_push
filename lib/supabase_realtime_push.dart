@@ -189,7 +189,8 @@ abstract final class SupabaseRealtimePush {
       );
     }
     if (!isSupported) return;
-    _listenForTaps();
+    // No tap handler here: a tap with nobody listening to [taps] would be
+    // dropped, while the platform keeps it for [launchTap] until Dart asks.
     await _channel.invokeMethod<void>('start', {
       'supabaseUrl': supabaseUrl.toString(),
       'publishableKey': publishableKey,
