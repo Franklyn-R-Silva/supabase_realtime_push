@@ -1,0 +1,64 @@
+# OpenSSF Scorecard grades how the repository is run (branch rules, token
+# permissions, pinned actions, dangerous workflow patterns, maintenance).
+#
+# Private-repository version: Scorecard's API only publishes public results,
+# and uploading SARIF to code scanning needs GitHub Advanced Security here, so
+# the score goes to the job summary instead. Going public (#7) switches this to
+# the same workflow as the other packages: publish_results, the SARIF upload
+# and the badge.
+# https://github.com/ossf/scorecard-action#workflow-restrictions
+name: scorecard
+
+on:
+  # Re-scores the Branch-Protection check when the ruleset changes.
+  branch_protection_rule:
+  # Keeps the Maintained check current between pushes.
+  schedule:
+    - cron: '23 6 * * 1'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+# Blocks all cache access: nothing here needs a cache, and none can be poisoned.
+cache-mode: none
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analysis:
+    name: scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Scorecard only supports the default branch.
+    if: github.event.repository.default_branch == github.ref_name
+    # Read-only, and on a private repository the token needs each of these to
+    # see the PRs, checks and issues the checks grade.
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@23f22cd43608bae7a1f1fa2603d7314dee9538a5 # v2.6.0
+        with:
+          results_file: results.json
+          results_format: json
+          publish_results: false
+
+      - name: Write the score to the job summary
+        if: always()
+        run: |
+          jq -r '
+            "## OpenSSF Scorecard: \(.score) / 10", "",
+            "| Check | Score | Reason |", "|---|---|---|",
+            (.checks | sort_by(.score) | .[] | "| \(.name) | \(.score) | \(.reason | gsub("\\|"; "/")) |")
+          ' results.json >> "$GITHUB_STEP_SUMMARY"
