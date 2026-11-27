@@ -9,7 +9,9 @@ with Flutter (a toolkit for building apps) that use Supabase (a ready-made
 database and server). A small helper on the phone keeps one connection open
 to the server, without starting the whole app. It works like a doorbell: when
 something changes, the server only rings the bell. The phone then asks "what
-should I show now?" and makes its notification list match the answer. If the
+should I show now?" and makes its notification list match the answer. With the
+screen on that takes a second or two; with the screen off the phone mostly
+sleeps, so a notification can take up to about five minutes. If the
 connection drops, in an elevator or on weak Wi-Fi, the phone asks again once
 it is back, so nothing is lost. A message read on another phone disappears
 from this one.
@@ -235,6 +237,10 @@ screen, unless the app is exempt from battery optimization.
 - **Exempt:** no notification. Ask with
   `SupabaseRealtimePush.requestIgnoreBatteryOptimizations()`.
 
+`smallIcon` is looked up by name. If your release build shrinks resources,
+keep that drawable (`tools:keep="@drawable/<name>"` in `res/raw/keep.xml`), or
+the status bar falls back to the app icon.
+
 Without the exemption, Android also cuts the network in Doze (screen off,
 phone still for a while), so a notification can wait for the next maintenance
 window. Exempt apps keep the network.
@@ -267,6 +273,12 @@ Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 
 ## Limits
 
+- **Delivery is instant only with the screen on.** With the screen off the
+  phone's processor sleeps, the connection's heartbeat stops and Realtime
+  closes it within a minute. Reconnecting all night would drain the battery,
+  so the service wakes every five minutes instead (later in deep Doze) and
+  fetches the snapshot; turning the screen on reconnects at once. FCM does not
+  have this limit, because Google holds that connection for every app.
 - Android only.
 - One Realtime connection per device, all day (see the self-hosted limit
   above).
