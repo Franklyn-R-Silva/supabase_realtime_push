@@ -72,6 +72,11 @@ With `SEED_SELF_HOST=true` the tenant is recreated from that variable on every
 boot, so set it in the environment, not in the database. On Supabase Cloud the
 limit is your plan's Realtime quota.
 
+`TENANT_MAX_JOINS_PER_SECOND` (100 by default) matters after a Realtime
+restart, when every device rejoins. The service spreads its retries randomly,
+so a fleet of a few thousand catches up within a minute; raise it if yours is
+bigger.
+
 ### 2. Flutter
 
 ```yaml
@@ -114,6 +119,18 @@ await supabase.auth.signOut();
 `forgetDevice` deletes the pair, so the next person to sign in on this phone
 gets a new one.
 
+Sessions also end without your sign-out button: a password change, a revoked
+session, a refresh that fails. Stop the service on every sign-out, or the next
+person on a shared phone keeps seeing the previous user's notifications:
+
+```dart
+supabase.auth.onAuthStateChange.listen((state) {
+  if (state.event == AuthChangeEvent.signedOut) {
+    SupabaseRealtimePush.stop(forgetDevice: true);
+  }
+});
+```
+
 ### 5. Send a notification
 
 From SQL, an Edge Function with the service role, or a trigger:
@@ -132,6 +149,14 @@ When the user opens it in the app, clear it everywhere:
 
 ```dart
 await supabase.rpc('realtime_push_mark_read', params: {'p_key': 'order:42'});
+```
+
+Read rows stay so the app can show a history. Trim them on a schedule, for
+example with `pg_cron`:
+
+```sql
+delete from public.realtime_push_notifications
+ where read_at < now() - interval '30 days';
 ```
 
 ### 6. Handle taps
@@ -165,8 +190,18 @@ set search_path = public, pg_temp as $$
   from my_unread_chats(p_user) c;
 $$;
 
--- in your trigger, after the write that changes what a user should see:
-perform realtime_push_signal(array[new.recipient_id]);
+-- your trigger: security definer, because realtime_push_signal is granted to
+-- service_role only and a trigger running as the user would fail the write
+create or replace function public.chat_message_signal()
+returns trigger language plpgsql security definer
+set search_path = '' as $$
+begin
+  perform public.realtime_push_signal(array[new.recipient_id]);
+  return null;
+end $$;
+
+create trigger chat_message_signal after insert on public.chat_messages
+  for each row execute function public.chat_message_signal();
 ```
 
 - Use `p_user`, not `auth.uid()`: the device calls the snapshot without a
