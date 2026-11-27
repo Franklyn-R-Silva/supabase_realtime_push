@@ -118,10 +118,15 @@ class _PushDemoState extends State<PushDemo> {
   // next user of this phone gets a new one.
   Future<void> _signOut() => _run(() async {
     final device = await SupabaseRealtimePush.device();
-    await _supabase.rpc<void>(
-      'realtime_push_unregister',
-      params: device.unregisterParams,
-    );
+    try {
+      await _supabase.rpc<void>(
+        'realtime_push_unregister',
+        params: device.unregisterParams,
+      );
+    } on Object {
+      // Offline: sign out anyway. The forgotten pair can no longer read
+      // anything.
+    }
     await SupabaseRealtimePush.stop(forgetDevice: true);
     await _supabase.auth.signOut();
   });

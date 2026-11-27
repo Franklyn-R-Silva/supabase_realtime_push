@@ -11,7 +11,8 @@ to the server, without starting the whole app. It works like a doorbell: when
 something changes, the server only rings the bell. The phone then asks "what
 should I show now?" and makes its notification list match the answer. With the
 screen on that takes a second or two; with the screen off the phone mostly
-sleeps, so a notification can take up to about five minutes. If the
+sleeps, so a notification can take up to about five minutes, or about fifteen
+when the phone has been still for a long time. If the
 connection drops, in an elevator or on weak Wi-Fi, the phone asks again once
 it is back, so nothing is lost. A message read on another phone disappears
 from this one.
@@ -90,7 +91,9 @@ limit is your plan's Realtime quota.
 `TENANT_MAX_JOINS_PER_SECOND` (100 by default) matters after a Realtime
 restart, when every device rejoins. The service spreads its retries randomly,
 so a fleet of a few thousand catches up within a minute; raise it if yours is
-bigger.
+bigger. `TENANT_MAX_EVENTS_PER_SECOND` (also 100) counts every signal: an
+announcement to the whole fleet at once goes past it and Realtime drops
+broadcasts for a while, so raise it or spread such sends out.
 
 ### 2. Flutter
 
@@ -100,8 +103,13 @@ dependencies:
     git: https://github.com/Franklyn-R-Silva/supabase_realtime_push
 ```
 
-The plugin's manifest brings its permissions, service and receivers; nothing to
-add to yours.
+The plugin's manifest brings its permissions, service and receivers. One
+permission it leaves to you on purpose: add
+`<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />`
+to your manifest only if you want the one-tap battery-exemption dialog and
+Google Play's policy allows it for your app (see
+[Battery](#battery-and-the-connected-notification)). Without it,
+`requestIgnoreBatteryOptimizations()` opens the system list instead.
 
 ### 3. Register and start (after sign-in)
 
@@ -126,13 +134,18 @@ being closed, the phone rebooting and the app updating.
 
 ```dart
 final device = await SupabaseRealtimePush.device();
-await supabase.rpc('realtime_push_unregister', params: device.unregisterParams);
+try {
+  await supabase.rpc('realtime_push_unregister', params: device.unregisterParams);
+} catch (_) {
+  // Offline: sign out anyway. The forgotten pair can no longer read anything.
+}
 await SupabaseRealtimePush.stop(forgetDevice: true);
 await supabase.auth.signOut();
 ```
 
 `forgetDevice` deletes the pair, so the next person to sign in on this phone
-gets a new one.
+gets a new one. Unregistering is best effort: without a network the row stays
+on the server, but no phone holds its secret any more.
 
 Sessions also end without your sign-out button: a password change, a revoked
 session, a refresh that fails. Stop the service on every sign-out, or the next
@@ -179,7 +192,7 @@ delete from public.realtime_push_notifications
 ```dart
 final launch = await SupabaseRealtimePush.launchTap(); // opened the app
 SupabaseRealtimePush.taps.listen((tap) {               // app was running
-  router.go(tap.data['route'] as String);
+  if (tap.data['route'] case final String route) router.go(route);
 });
 ```
 
@@ -276,7 +289,8 @@ Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 - **Delivery is instant only with the screen on.** With the screen off the
   phone's processor sleeps, the connection's heartbeat stops and Realtime
   closes it within a minute. Reconnecting all night would drain the battery,
-  so the service wakes every five minutes instead (later in deep Doze) and
+  so the service wakes every five minutes instead (up to about fifteen in
+  deep Doze, Android's idle mode for a phone left still) and
   fetches the snapshot; turning the screen on reconnects at once. FCM does not
   have this limit, because Google holds that connection for every app.
 - Android only.
