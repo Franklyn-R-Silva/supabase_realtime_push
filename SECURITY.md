@@ -20,15 +20,16 @@ So is anything in how this repository builds and publishes the package.
 
 ## Reporting a Vulnerability
 
-Email the maintainer at franklyn.dev.mobile@gmail.com with:
+**Preferred:** GitHub's
+[private vulnerability reporting](https://github.com/Franklyn-R-Silva/supabase_realtime_push/security/advisories/new)
+("Report a vulnerability" under the Security tab).
+
+**Or** email the maintainer at franklyn.dev.mobile@gmail.com. Either way, include:
 
 - A description of the vulnerability and its impact
 - Steps to reproduce (a minimal sample is ideal)
 - The `supabase_realtime_push`, Flutter and Supabase (or Realtime image)
   versions affected
-
-Once the repository is public, GitHub's private vulnerability reporting
-(Security tab, "Report a vulnerability") is preferred.
 
 Please do not open a public issue for a vulnerability.
 
