@@ -49,10 +49,15 @@ one, and the database needs no queue.
 - Any `broadcast` on the joined topic means "changed". Its payload is ignored.
 - After every successful join (first or reconnect) the service fetches the
   snapshot.
-- Reconnect backoff: 1, 2, 5, 10, 30 s, then every 30 s.
+- Reconnect backoff: 1, 2, 5, 10, 30 s, then every 30 s, each wait multiplied
+  by a random factor between 0.5 and 1.5.
 - Supabase Cloud closes a public Realtime connection after at most 24 hours.
-  A server close after a long healthy session reconnects at once, without
-  growing the backoff.
+  A server close after a long healthy session reconnects after a random 0 to
+  5 s, without growing the backoff.
+- Why random: a Realtime restart drops every device at once. Self-hosted
+  Realtime accepts 100 joins per second by default
+  (`TENANT_MAX_JOINS_PER_SECOND`), so a fleet that retries in lockstep gets
+  most joins refused, wave after wave.
 
 The topic must be **public** (`private: false`). Projects that turned off
 public Realtime access cannot use this package.
