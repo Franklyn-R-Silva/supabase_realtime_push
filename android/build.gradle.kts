@@ -2,7 +2,7 @@ group = "dev.devfrs.supabase_realtime_push"
 version = "1.0-SNAPSHOT"
 
 buildscript {
-    val kotlinVersion = "2.4.0"
+    val kotlinVersion = "2.4.21"
     repositories {
         google()
         mavenCentral()
@@ -73,5 +73,5 @@ kotlin {
 
 dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test")
-    testImplementation("org.mockito:mockito-core:5.0.0")
+    testImplementation("org.mockito:mockito-core:5.24.0")
 }
