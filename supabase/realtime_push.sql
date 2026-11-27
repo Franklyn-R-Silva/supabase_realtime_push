@@ -30,8 +30,15 @@
 --   - Already have your own unread data? Replace realtime_push_snapshot_for
 --     with `create or replace` (it gets the user id, and must return the JSON
 --     in docs/contract.md section 3), and call
---     realtime_push_signal(array[user_id]) from your own triggers. Running
+--     realtime_push_signal(array[user_id]) from your own triggers. Make that
+--     trigger function `security definer set search_path = ''`: the signal is
+--     granted to service_role only, so a trigger running as the signed-in
+--     user would be refused and take the user's write down with it. Running
 --     this file again keeps your version; drop it to get the default back.
+--   - Read rows stay, so an app can show its history. Trim them on a
+--     schedule, for example with pg_cron:
+--       delete from public.realtime_push_notifications
+--        where read_at < now() - interval '30 days';
 --
 -- Contract: docs/contract.md, sections 1, 3 and 7.
 
