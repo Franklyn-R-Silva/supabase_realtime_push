@@ -1,0 +1,51 @@
+name: android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - android/**
+      - example/android/**
+      - .github/workflows/android.yaml
+  pull_request:
+    branches: [main]
+    paths:
+      - android/**
+      - example/android/**
+      - .github/workflows/android.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The JVM tests of the Kotlin side. Gradle runs from the example app, the only
+# Android project that includes the plugin; with a path filter this check
+# cannot be required on main, or it would wait forever on PRs that skip it.
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Writes local.properties and the Gradle wrapper jar, both git-ignored.
+      - name: Generate the Gradle setup
+        working-directory: example
+        run: flutter build apk --config-only
+
+      - name: Kotlin unit tests
+        working-directory: example/android
+        run: ./gradlew :supabase_realtime_push:testDebugUnitTest --no-daemon
