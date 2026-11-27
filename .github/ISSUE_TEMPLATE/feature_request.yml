@@ -1,0 +1,18 @@
+name: ✨ Feature request
+description: Suggest an idea or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: ["Franklyn-R-Silva"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do that the package doesn't support? A problem without a solution is a fine request.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Optional. Say if you'd like to send the PR yourself.

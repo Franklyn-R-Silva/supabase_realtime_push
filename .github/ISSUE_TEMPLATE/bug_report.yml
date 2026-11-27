@@ -1,0 +1,38 @@
+name: 🐛 Bug report
+description: A notification that did not arrive, arrived twice, or never went away
+title: "[Bug]: "
+labels: ["bug"]
+assignees: ["Franklyn-R-Silva"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Only the first box is required.
+        For a security problem, do not open an issue: see SECURITY.md.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected, what the phone did, and whether the app was open, in the background or closed.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`adb logcat -s SupabaseRealtimePush` around the moment it failed, if you have it. Remove keys and secrets."
+      render: text
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Package, Flutter, Android version and phone brand, Supabase Cloud or the Realtime image tag.
+      placeholder: "supabase_realtime_push 0.1.0, Flutter 3.47, Android 15 (Samsung), supabase/realtime:v2.102.3"
+  - type: dropdown
+    id: battery
+    attributes:
+      label: Battery optimization
+      options:
+        - App is exempt
+        - App is not exempt
+        - Don't know

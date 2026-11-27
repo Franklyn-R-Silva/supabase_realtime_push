@@ -1,0 +1,38 @@
+name: supabase_realtime_push
+description: >-
+  Push notifications on Android without Firebase: a native service holds one
+  Supabase Realtime connection and shows the notifications your database lists.
+version: 0.0.1
+repository: https://github.com/Franklyn-R-Silva/supabase_realtime_push
+issue_tracker: https://github.com/Franklyn-R-Silva/supabase_realtime_push/issues
+# Private until the first release: this stops an accidental `pub publish`.
+# Remove it in the go-public checklist, together with the CI publish dry-run.
+publish_to: none
+topics:
+  - supabase
+  - push-notifications
+  - notifications
+  - realtime
+  - android
+
+environment:
+  sdk: ^3.8.0
+  flutter: ">=3.32.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Kept until the Dart API PR replaces the generated template code.
+  plugin_platform_interface: ^2.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ">=5.0.0 <7.0.0"
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.devfrs.supabase_realtime_push
+        pluginClass: SupabaseRealtimePushPlugin
