@@ -29,7 +29,10 @@
 --       select realtime_push_mark_read('chat:42');
 --   - Already have your own unread data? Replace realtime_push_snapshot_for
 --     with `create or replace` (it gets the user id, and must return the JSON
---     in docs/contract.md section 3), and call
+--     in docs/contract.md section 3). It runs inside realtime_push_snapshot,
+--     whose search_path is empty: give yours `set search_path = public` or
+--     schema-qualify every name, or it fails with "relation does not exist"
+--     and the phones show nothing. Then call
 --     realtime_push_signal(array[user_id]) from your own triggers. Make that
 --     trigger function `security definer set search_path = ''`: the signal is
 --     granted to service_role only, so a trigger running as the signed-in

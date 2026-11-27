@@ -160,7 +160,7 @@ a notification while the app is running.
 | `realtime_push_register(p_topic, p_secret, p_platform default 'android')` | the app, signed in | Upserts the device for `auth.uid()`. A topic owned by another user is refused. Also deletes the caller's other devices not seen for 60 days |
 | `realtime_push_unregister(p_topic)` | the app, signed in | Deletes the caller's own device |
 | `realtime_push_snapshot(p_topic, p_secret)` | the service, `anon` (also `authenticated`) | Checks the pair, stamps `seen_at` (at most once a minute), returns `realtime_push_snapshot_for(user)` or `null` |
-| `realtime_push_snapshot_for(p_user)` | the snapshot function only | **Yours to replace** with `create or replace`; running the script again keeps your version. The default reads `realtime_push_notifications` |
+| `realtime_push_snapshot_for(p_user)` | the snapshot function only | **Yours to replace** with `create or replace`; running the script again keeps your version. It runs inside `realtime_push_snapshot`, whose `search_path` is empty: give yours its own `set search_path`, or schema-qualify every name. The default reads `realtime_push_notifications` |
 | `realtime_push_signal(p_users uuid[])` | your triggers, `service_role` | `realtime.send('{}', 'changed', 'push:' \|\| topic, false)` to every device of those users. Errors become warnings: a push must never fail the write that caused it |
 | `realtime_push_notifications` | the user reads own rows (RLS); writes go through the two functions below | A ready-made inbox. Any insert, update or delete signals the owners, once per statement |
 | `realtime_push_send(p_user, p_key, p_title, p_body default '', p_data default '{}', p_silent default false)` | your backend, `service_role` | Inserts an inbox row and returns its id. Same `p_key` = same notification |
@@ -184,3 +184,8 @@ device silently stops getting notifications.
 - Self-hosted: `TENANT_MAX_CONCURRENT_USERS`, **200 by default**. With
   `SEED_SELF_HOST=true` the tenant is recreated on every boot from that
   variable, so set it in the Realtime container's environment.
+- Every `realtime.send` counts against the tenant's events per second
+  (`TENANT_MAX_EVENTS_PER_SECOND`, **100 by default** when self-hosted). A
+  signal to many users at once, such as an announcement to the whole fleet,
+  goes past it, and Realtime then drops broadcasts for a while. Raise it before
+  fleet-wide sends, or spread them out.
