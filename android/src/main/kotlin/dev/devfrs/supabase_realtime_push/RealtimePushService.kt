@@ -120,7 +120,14 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
             return START_NOT_STICKY
         }
         // First thing: Android allows only a few seconds between startForegroundService and startForeground.
-        decideForeground(current, required)
+        if (!decideForeground(current, required)) {
+            // Not exempt, and Android 12+ refused the foreground from the background (a sticky
+            // restart, the watch). A background service would be stopped within a minute anyway.
+            // The status stays running: the next app launch starts it again.
+            Log.w(TAG, "foreground not allowed from the background: waiting for the app to open")
+            stopSelf()
+            return START_NOT_STICKY
+        }
         stopped = false
         if (intent?.action == ACTION_WATCH) wakeLock.acquire(WAKE_MS)
         handler.post {
@@ -147,13 +154,15 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         super.onDestroy()
     }
 
-    private fun decideForeground(config: Config, required: Boolean) {
+    /** `false` when the service cannot keep running: not exempt and not in the foreground. */
+    private fun decideForeground(config: Config, required: Boolean): Boolean {
         val exempt = isIgnoringBatteryOptimizations(this)
         if ((!exempt || required) && !foreground) enterForeground(config)
         if (exempt && foreground) {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             foreground = false
         }
+        return exempt || foreground
     }
 
     private fun enterForeground(config: Config?) {
@@ -168,9 +177,7 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
             }
             foreground = true
         } catch (e: Exception) {
-            // Android 12+ refuses from the background outside its exemptions (the app lost its
-            // battery exemption while running in the background). The service runs until the
-            // system stops it; the next start from the app brings it back in the foreground.
+            // ForegroundServiceStartNotAllowedException: Android 12+ outside its exemptions.
             Log.w(TAG, "foreground refused: ${e.javaClass.simpleName}")
         }
     }

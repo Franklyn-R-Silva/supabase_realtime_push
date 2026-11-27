@@ -3,6 +3,7 @@ package dev.devfrs.supabase_realtime_push
 import android.content.Context
 import android.util.Base64
 import org.json.JSONObject
+import java.io.File
 import java.security.SecureRandom
 
 internal const val TAG = "SupabaseRealtimePush"
@@ -20,7 +21,17 @@ internal data class Config(
 
 internal data class Credentials(val topic: String, val secret: String)
 
-/** The package's private `SharedPreferences`. Never log what comes out of here. */
+/**
+ * What reconciliation remembers between snapshots, by id: the last revision alerted, the
+ * revision the user dismissed, and the [signature] of what is in the shade.
+ */
+internal data class Memory(
+    val alerted: Map<String, Long> = emptyMap(),
+    val dismissed: Map<String, Long> = emptyMap(),
+    val posted: Map<String, String> = emptyMap(),
+)
+
+/** The package's private storage. Never log what comes out of here. */
 internal class Store(context: Context) {
     companion object {
         const val STOPPED = "stopped"
@@ -28,12 +39,11 @@ internal class Store(context: Context) {
         const val REJECTED = "rejected"
 
         private const val FILE = "dev.devfrs.supabase_realtime_push"
-        private const val TOPIC = "topic"
-        private const val SECRET = "secret"
         private const val TAP_KEY = "tapKey"
         private const val STATUS = "status"
         private const val ALERTED = "alerted"
         private const val DISMISSED = "dismissed"
+        private const val POSTED = "posted"
         private val LOCK = Any()
 
         private fun randomToken(): String {
@@ -43,25 +53,15 @@ internal class Store(context: Context) {
     }
 
     private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+    private val device = CredentialsFile(File(context.applicationContext.noBackupFilesDir, "$FILE.device"))
 
-    fun credentials(): Credentials? {
-        val topic = prefs.getString(TOPIC, null) ?: return null
-        val secret = prefs.getString(SECRET, null) ?: return null
-        return Credentials(topic, secret)
-    }
+    fun credentials(): Credentials? = synchronized(LOCK) { device.read() }
 
     fun credentialsOrCreate(): Credentials = synchronized(LOCK) {
-        credentials() ?: Credentials(randomToken(), randomToken()).also {
-            // commit, not apply: Dart registers the pair on the server right away, and a
-            // process death before an async write would leave the server with a pair this
-            // device no longer has.
-            prefs.edit().putString(TOPIC, it.topic).putString(SECRET, it.secret).commit()
-        }
+        device.read() ?: Credentials(randomToken(), randomToken()).also { device.write(it) }
     }
 
-    fun forgetDevice() {
-        prefs.edit().remove(TOPIC).remove(SECRET).commit()
-    }
+    fun forgetDevice() = synchronized(LOCK) { device.delete() }
 
     /** A per-install key on every tap intent: the launch activity is exported, so anyone can send it extras. */
     fun tapKey(): String = synchronized(LOCK) {
@@ -99,24 +99,30 @@ internal class Store(context: Context) {
             prefs.edit().putString(STATUS, value).commit()
         }
 
-    fun alerted(): Map<String, Long> = readMap(ALERTED)
+    fun memory() = Memory(
+        alerted = readMap(ALERTED) { json, id -> json.optLong(id) },
+        dismissed = readMap(DISMISSED) { json, id -> json.optLong(id) },
+        posted = readMap(POSTED) { json, id -> json.optString(id) },
+    )
 
-    fun dismissed(): Map<String, Long> = readMap(DISMISSED)
-
-    fun saveRevisions(alerted: Map<String, Long>, dismissed: Map<String, Long>) {
-        prefs.edit().putString(ALERTED, JSONObject(alerted).toString()).putString(DISMISSED, JSONObject(dismissed).toString()).apply()
+    fun saveMemory(memory: Memory) {
+        prefs.edit()
+            .putString(ALERTED, JSONObject(memory.alerted).toString())
+            .putString(DISMISSED, JSONObject(memory.dismissed).toString())
+            .putString(POSTED, JSONObject(memory.posted).toString())
+            .apply()
     }
 
-    fun clearRevisions() {
-        prefs.edit().remove(ALERTED).remove(DISMISSED).apply()
+    fun clearMemory() {
+        prefs.edit().remove(ALERTED).remove(DISMISSED).remove(POSTED).apply()
     }
 
-    private fun readMap(key: String): Map<String, Long> {
+    private fun <T> readMap(key: String, value: (JSONObject, String) -> T): Map<String, T> {
         val json = try {
             JSONObject(prefs.getString(key, null) ?: return emptyMap())
         } catch (e: Exception) {
             return emptyMap()
         }
-        return json.keys().asSequence().associateWith { json.optLong(it) }
+        return json.keys().asSequence().associateWith { value(json, it) }
     }
 }

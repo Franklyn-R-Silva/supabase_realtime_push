@@ -66,24 +66,20 @@ internal class Shade(private val context: Context) {
         // A stop() that ran while this snapshot was in flight wins.
         if (store.status != Store.RUNNING) return
         createChannels(config)
-        val plan = reconcile(snapshot, shown(), store.alerted(), store.dismissed())
+        val plan = reconcile(snapshot, shown(), store.memory())
         for (id in plan.cancel) manager.cancel(id, NOTIFICATION_ID)
         val now = System.currentTimeMillis()
-        plan.post.forEachIndexed { i, post ->
-            // Launchers that show a number add up every notification's, so only one carries the badge.
-            val badge = if (i == 0) snapshot.badge else null
-            // A decreasing `when` keeps the snapshot's order in the shade, first on top.
-            notify(post, config, badge, now - i)
-        }
-        store.saveRevisions(plan.alerted, plan.dismissed)
-        Log.d(TAG, "shade: ${plan.post.size} shown, ${plan.cancel.size} removed")
+        // A decreasing `when` keeps the snapshot's order among what is posted together, first on top.
+        plan.post.forEachIndexed { i, post -> notify(post, config, now - i) }
+        store.saveMemory(plan.memory)
+        Log.d(TAG, "shade: ${plan.post.size} posted, ${plan.cancel.size} removed")
     }
 
     /** The user swiped [id] away, or tapped it, while it showed [revision]. */
     fun dismissed(id: String, revision: Long) = synchronized(LOCK) {
-        val dismissed = store.dismissed()
+        val memory = store.memory()
         // Never backwards: a late swipe of an old revision must not undo a newer one.
-        store.saveRevisions(store.alerted(), dismissed + (id to maxOf(revision, dismissed[id] ?: Long.MIN_VALUE)))
+        store.saveMemory(memory.copy(dismissed = memory.dismissed + (id to maxOf(revision, memory.dismissed[id] ?: Long.MIN_VALUE))))
         // A snapshot applied between the gesture and this call may have reposted it.
         manager.cancel(id, NOTIFICATION_ID)
     }
@@ -95,7 +91,7 @@ internal class Shade(private val context: Context) {
     private fun shown(): Set<String> =
         manager.activeNotifications.filter { it.id == NOTIFICATION_ID && it.tag != null }.map { it.tag }.toSet()
 
-    private fun notify(post: Post, config: Config, badge: Int?, `when`: Long) {
+    private fun notify(post: Post, config: Config, `when`: Long) {
         val n = post.notification
         val builder = NotificationCompat.Builder(context, MESSAGES_CHANNEL)
             .setSmallIcon(smallIcon(config))
@@ -114,7 +110,7 @@ internal class Shade(private val context: Context) {
             .setSilent(!post.alert)
         // Before Android 8 the notification, not the channel, carries sound and vibration.
         if (post.alert) builder.setDefaults(NotificationCompat.DEFAULT_ALL)
-        if (badge != null) builder.setNumber(badge)
+        post.badge?.let { builder.setNumber(it) }
         try {
             manager.notify(n.id, NOTIFICATION_ID, builder.build())
         } catch (e: SecurityException) {

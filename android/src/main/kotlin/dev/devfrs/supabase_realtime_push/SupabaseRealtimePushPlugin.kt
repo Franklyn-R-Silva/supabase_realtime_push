@@ -51,6 +51,7 @@ class SupabaseRealtimePushPlugin :
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         attach(binding)
         readTap(binding.activity.intent)?.let { launchTap = it }
+        restartIfRunning()
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) = attach(binding)
@@ -130,13 +131,27 @@ class SupabaseRealtimePushPlugin :
         result.success(null)
     }
 
+    /**
+     * Without the battery exemption, Android 12+ lets neither the START_STICKY restart nor the
+     * inexact watch alarm start a foreground service from the background: once the system kills
+     * the process, the service stays down. The app on screen may start it, so every launch does.
+     */
+    private fun restartIfRunning() {
+        if (Store(context).status != Store.RUNNING) return
+        try {
+            RealtimePushService.start(context)
+        } catch (e: Exception) {
+            Log.w(TAG, "service not restarted on launch: ${e.javaClass.simpleName}")
+        }
+    }
+
     private fun stop(forgetDevice: Boolean) {
         val store = Store(context)
         // Status first: a snapshot still in flight sees it and leaves the shade alone.
         store.status = Store.STOPPED
         RealtimePushService.stop(context)
         Shade(context).clear()
-        store.clearRevisions()
+        store.clearMemory()
         if (forgetDevice) store.forgetDevice()
     }
 
