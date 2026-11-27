@@ -157,12 +157,21 @@ a notification while the app is running.
 | Object | Who calls it | What it does |
 |---|---|---|
 | `realtime_push_devices` | nobody directly (RLS on, no policies) | `topic`, `user_id`, `secret_hash`, `platform`, `created_at`, `seen_at` |
-| `realtime_push_register(p_topic, p_secret, p_platform)` | the app, signed in | Upserts the device for `auth.uid()`. A topic owned by another user is refused |
+| `realtime_push_register(p_topic, p_secret, p_platform default 'android')` | the app, signed in | Upserts the device for `auth.uid()`. A topic owned by another user is refused. Also deletes the caller's other devices not seen for 60 days |
 | `realtime_push_unregister(p_topic)` | the app, signed in | Deletes the caller's own device |
-| `realtime_push_snapshot(p_topic, p_secret)` | the service, `anon` | Checks the pair, stamps `seen_at`, returns `realtime_push_snapshot_for(user)` or `null` |
-| `realtime_push_snapshot_for(p_user)` | the snapshot function | **Yours to replace.** The default reads `realtime_push_notifications` |
+| `realtime_push_snapshot(p_topic, p_secret)` | the service, `anon` (also `authenticated`) | Checks the pair, stamps `seen_at` (at most once a minute), returns `realtime_push_snapshot_for(user)` or `null` |
+| `realtime_push_snapshot_for(p_user)` | the snapshot function only | **Yours to replace** with `create or replace`; running the script again keeps your version. The default reads `realtime_push_notifications` |
 | `realtime_push_signal(p_users uuid[])` | your triggers, `service_role` | `realtime.send('{}', 'changed', 'push:' \|\| topic, false)` to every device of those users. Errors become warnings: a push must never fail the write that caused it |
-| `realtime_push_notifications` | your backend, or the user (RLS: own rows) | A ready-made inbox: insert a row to notify, set `read_at` to clear it |
+| `realtime_push_notifications` | the user reads own rows (RLS); writes go through the two functions below | A ready-made inbox. Any insert, update or delete signals the owners, once per statement |
+| `realtime_push_send(p_user, p_key, p_title, p_body default '', p_data default '{}', p_silent default false)` | your backend, `service_role` | Inserts an inbox row and returns its id. Same `p_key` = same notification |
+| `realtime_push_mark_read(p_key)` | the app, signed in | Sets `read_at` on the caller's unread rows of that key |
+
+The default snapshot has one notification per `key`: its newest unread row,
+with `revision` = that row's id. Newest first, at most 20; `badge` counts every
+unread row.
+
+`secret_hash` is `sha256()` of the secret's UTF-8 bytes, built into Postgres
+11 and later, so no extension is needed.
 
 ## 8. Self-hosted Realtime
 
