@@ -152,7 +152,7 @@ MethodChannel `supabase_realtime_push`.
 | Method | Arguments | Returns |
 |---|---|---|
 | `device` | — | `{topic, secret}` (creates them on first call) |
-| `start` | `{supabaseUrl, publishableKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?}` | `null` |
+| `start` | `{supabaseUrl, publishableKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?}` | `null`. Errors: `bad_arguments`; `start_failed` when Android refuses to start the service (from the background on Android 12+). The status stays `running`, so the next `start`, a reboot or an app update tries again |
 | `stop` | `{forgetDevice: bool}` | `null` |
 | `status` | — | `"stopped"`, `"running"` or `"rejected"` |
 | `isIgnoringBatteryOptimizations` | — | `bool` |
