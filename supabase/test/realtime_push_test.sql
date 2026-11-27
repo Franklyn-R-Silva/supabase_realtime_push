@@ -453,6 +453,10 @@ begin
   delete from public.realtime_push_notifications where user_id = md5('bob')::uuid;
   assert (select array_agg(topic) from realtime.sent) = array['push:' || test.pad43('bob-phone')],
          'a delete signals too';
+
+  truncate realtime.sent;
+  delete from public.realtime_push_notifications where read_at is not null;
+  assert (select count(*) from realtime.sent) = 0, 'trimming read rows wakes nobody';
 end
 $$;
 

@@ -294,7 +294,9 @@ end;
 $$;
 
 -- One signal per statement, not per row: marking ten rows read sends one.
--- Any insert, update or delete can change the snapshot, so all three signal.
+-- Inserts and updates can change the snapshot, and so can deleting an unread
+-- row. Deleting rows already read changes nothing, so a nightly trim of the
+-- inbox wakes no phone.
 create or replace function public.realtime_push_notifications_changed()
 returns trigger
 language plpgsql
@@ -302,7 +304,10 @@ security definer
 set search_path = ''
 as $$
 begin
-  perform public.realtime_push_signal(array(select distinct c.user_id from changed c));
+  perform public.realtime_push_signal(array(
+    select distinct c.user_id from changed c
+     where tg_op <> 'DELETE' or c.read_at is null
+  ));
   return null;
 end;
 $$;
