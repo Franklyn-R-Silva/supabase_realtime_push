@@ -7,33 +7,225 @@ shade shows.
 > **Status: work in progress, not published yet.** The design is in
 > [docs/contract.md](docs/contract.md).
 
+- No Google Play services, no FCM project, no `google-services.json`. Built
+  for phones without Google services and for company fleets that keep Google
+  out. If your users all have Play services and you ship on Play, FCM is the
+  better tool: it shares one connection among all apps.
+- Works with Supabase Cloud and with self-hosted Supabase.
+- Nothing is lost when the connection drops: every reconnect fetches the full
+  list again.
+- A notification read on another device disappears on this one.
+
 ## How it works
 
-1. The app registers the device with your Supabase project (a random topic and
-   secret, one pair per device).
+1. The app registers the device with your project: a random topic and secret,
+   one pair per device. The database keeps only the secret's hash.
 2. A native Android service keeps one WebSocket to Realtime, listening on that
-   device's topic. No Flutter engine, no Google services.
-3. When something changes, the database sends an empty `changed` signal.
-4. The service asks a SQL function for the **snapshot** (every notification the
-   device should show right now) and makes the shade match it.
-
-Nothing is lost when the socket drops: every reconnect fetches the snapshot
-again.
+   device's topic. It runs without the Flutter engine, so it uses a few MB of
+   memory.
+3. When something changes, the database sends an empty `changed` signal to the
+   topic. No content ever travels over the socket.
+4. The service asks a SQL function for the **snapshot** (every notification
+   the device should show right now) and makes the shade match it: new ones
+   alert, changed ones update quietly, gone ones disappear.
 
 ## Platform support
 
 | Android | iOS | Web | Desktop |
 |---|---|---|---|
-| ✅ | ❌ (iOS does not allow a background socket; use APNs) | ❌ | ❌ |
+| ✅ 7.0+ | ❌ iOS does not allow a background socket; use APNs | ❌ | ❌ |
 
-## Self-hosted Supabase: raise the Realtime connection limit
+On other platforms every call is a no-op, except `device()`, which throws, so
+you can keep one code path and check `SupabaseRealtimePush.isSupported`.
 
-Every device keeps one Realtime connection open all day. Self-hosted Realtime
-accepts **200** concurrent connections per tenant by default
-(`TENANT_MAX_CONCURRENT_USERS`) and refuses the rest with `429`, so the
-refused phones silently stop getting notifications. Set it in the Realtime
-container before rolling this out. See
-[docs/contract.md §8](docs/contract.md#8-self-hosted-realtime).
+## Setup
+
+### 1. Database
+
+Run [`supabase/realtime_push.sql`](supabase/realtime_push.sql) as a migration.
+It is idempotent and creates, in `public`:
+
+| Object | Called by | Does |
+|---|---|---|
+| `realtime_push_register(p_topic, p_secret, p_platform)` | the app, signed in | Links this device to `auth.uid()` |
+| `realtime_push_unregister(p_topic)` | the app, signed in | Unlinks it (on sign-out) |
+| `realtime_push_snapshot(p_topic, p_secret)` | the service (`anon`) | Returns the snapshot, or `null` for an unknown device |
+| `realtime_push_send(p_user, p_key, p_title, p_body, p_data, p_silent)` | your backend (`service_role`) | Puts a notification in the user's inbox, signals their devices, returns the row id |
+| `realtime_push_mark_read(p_key)` | the app, signed in | Clears that notification on every device |
+| `realtime_push_snapshot_for(p_user)` | the snapshot | **Yours to replace** (see below) |
+| `realtime_push_signal(p_users)` | your triggers | Wakes those users' devices |
+
+#### Self-hosted Supabase: raise the Realtime connection limit first
+
+Every device keeps one Realtime connection open all day, and an open app's own
+Supabase client holds another. Self-hosted Realtime accepts **200** concurrent
+connections per tenant by default and refuses the rest with `429 Too many
+connected users`. Refused phones silently stop getting notifications.
+
+```yaml
+# docker-compose, realtime service
+environment:
+  TENANT_MAX_CONCURRENT_USERS: "2000"
+```
+
+With `SEED_SELF_HOST=true` the tenant is recreated from that variable on every
+boot, so set it in the environment, not in the database. On Supabase Cloud the
+limit is your plan's Realtime quota.
+
+### 2. Flutter
+
+```yaml
+dependencies:
+  supabase_realtime_push:
+    git: https://github.com/Franklyn-R-Silva/supabase_realtime_push
+```
+
+The plugin's manifest brings its permissions, service and receivers; nothing to
+add to yours.
+
+### 3. Register and start (after sign-in)
+
+```dart
+final supabase = Supabase.instance.client;
+
+await SupabaseRealtimePush.requestNotificationPermission();
+final device = await SupabaseRealtimePush.device();
+await supabase.rpc('realtime_push_register', params: device.registerParams);
+await SupabaseRealtimePush.start(
+  supabaseUrl: Uri.parse('https://<ref>.supabase.co'),
+  publishableKey: '<publishable or anon key>',
+  channelName: 'Messages',
+);
+```
+
+Call `start` while the app is on screen: Android 12+ refuses to start a
+foreground service from the background. The service then survives the app
+being closed, the phone rebooting and the app updating.
+
+### 4. Sign out
+
+```dart
+final device = await SupabaseRealtimePush.device();
+await supabase.rpc('realtime_push_unregister', params: device.unregisterParams);
+await SupabaseRealtimePush.stop(forgetDevice: true);
+await supabase.auth.signOut();
+```
+
+`forgetDevice` deletes the pair, so the next person to sign in on this phone
+gets a new one.
+
+### 5. Send a notification
+
+From SQL, an Edge Function with the service role, or a trigger:
+
+```sql
+select realtime_push_send(
+  '9f3c…'::uuid,               -- the user
+  'order:42',                   -- id: same id replaces the notification
+  'Order shipped',
+  'It leaves the warehouse today',
+  '{"route": "/orders/42"}'     -- handed back to the app on tap
+);
+```
+
+When the user opens it in the app, clear it everywhere:
+
+```dart
+await supabase.rpc('realtime_push_mark_read', params: {'p_key': 'order:42'});
+```
+
+### 6. Handle taps
+
+```dart
+final launch = await SupabaseRealtimePush.launchTap(); // opened the app
+SupabaseRealtimePush.taps.listen((tap) {               // app was running
+  router.go(tap.data['route'] as String);
+});
+```
+
+## Your own data instead of the inbox
+
+The inbox table is a ready-made default. If your notifications already live in
+your tables (unread chat messages, pending approvals), replace one function and
+signal from your own triggers:
+
+```sql
+create or replace function public.realtime_push_snapshot_for(p_user uuid)
+returns jsonb language sql stable
+set search_path = public, pg_temp as $$
+  select jsonb_build_object(
+    'badge', count(*),
+    'notifications', coalesce(jsonb_agg(jsonb_build_object(
+      'id', 'chat:' || c.id,
+      'revision', c.last_message_id,
+      'title', c.title,
+      'body', c.last_message_text,
+      'data', jsonb_build_object('route', '/chat/' || c.id)
+    ) order by c.last_message_at desc), '[]'::jsonb))
+  from my_unread_chats(p_user) c;
+$$;
+
+-- in your trigger, after the write that changes what a user should see:
+perform realtime_push_signal(array[new.recipient_id]);
+```
+
+- Use `p_user`, not `auth.uid()`: the device calls the snapshot without a
+  session.
+- `revision` must grow whenever the notification should alert again.
+- Running `realtime_push.sql` again keeps your version; drop the function
+  first to get the default back.
+- The shape is in [docs/contract.md §3](docs/contract.md#3-snapshot).
+
+## Battery and the "connected" notification
+
+Android stops a background service about a minute after the app leaves the
+screen, unless the app is exempt from battery optimization.
+
+- **Not exempt:** the service runs in the foreground, and Android requires a
+  low-priority "connected" notification while it does (`connectedTitle`,
+  `connectedText`).
+- **Exempt:** no notification. Ask with
+  `SupabaseRealtimePush.requestIgnoreBatteryOptimizations()`.
+
+Without the exemption, Android also cuts the network in Doze (screen off,
+phone still for a while), so a notification can wait for the next maintenance
+window. Exempt apps keep the network.
+
+**Google Play:** asking for the exemption directly is
+[acceptable](https://developer.android.com/training/monitoring-device-state/doze-standby#exemption-cases)
+for a messaging app only when it *cannot* use FCM (no Google Play services on
+the devices, or a technical dependency on another messaging service). Choosing
+not to use FCM is not enough. Apps distributed outside Play, such as company
+fleets installing an APK, are not bound by that policy. Apps targeting Android
+14+ on Play also declare the `remoteMessaging` foreground service type in the
+Play Console.
+
+Some manufacturers kill background apps more aggressively than Android does.
+If notifications stop on one brand, see [dontkillmyapp.com](https://dontkillmyapp.com).
+
+## Security
+
+- The topic is public and the signal carries nothing: knowing a topic tells
+  you only that *something* changed for that device.
+- Content needs the secret, which is 256 random bits; the database stores only
+  its sha256.
+- The service never uses the user's session. Sharing the app's refresh token
+  with a second owner would trip GoTrue's refresh-token reuse detection and
+  sign the user out.
+- Unregistering a device (or deleting the user) makes the next snapshot
+  `null`, and the service clears its notifications and stops.
+
+Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
+
+## Limits
+
+- Android only.
+- One Realtime connection per device, all day (see the self-hosted limit
+  above).
+- Supabase Cloud closes public Realtime connections after 24 hours; the service
+  reconnects at once.
+- The topic must be public: projects that disabled public Realtime channels
+  cannot use this package.
 
 ## License
 
