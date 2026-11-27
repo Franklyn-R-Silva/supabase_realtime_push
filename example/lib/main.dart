@@ -1,15 +1,26 @@
-// package:material_ui needs Flutter 3.47; the example still supports 3.32.
+// package:material_ui needs Flutter 3.47; the example still supports 3.35.
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:supabase_realtime_push/supabase_realtime_push.dart';
 
 // Run with: flutter run --dart-define-from-file=.env (see .env.example).
 const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const _publishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+const _configured = _supabaseUrl != '' && _publishableKey != '';
 
-void main() => runApp(const MaterialApp(home: PushDemo()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (_configured) {
+    await Supabase.initialize(
+      url: _supabaseUrl,
+      publishableKey: _publishableKey,
+    );
+  }
+  runApp(const MaterialApp(home: PushDemo()));
+}
 
-/// Shows the service's state and the steps an app goes through.
+/// Signs in, registers the device, starts the service and shows its state.
 class PushDemo extends StatefulWidget {
   /// Creates the demo screen.
   const PushDemo({super.key});
@@ -19,19 +30,41 @@ class PushDemo extends StatefulWidget {
 }
 
 class _PushDemoState extends State<PushDemo> {
-  PushDevice? _device;
+  final _email = TextEditingController();
+  final _password = TextEditingController();
   PushStatus _status = PushStatus.stopped;
   bool _exempt = false;
   String _lastTap = '-';
+  String? _error;
+
+  SupabaseClient get _supabase => Supabase.instance.client;
+
+  bool get _signedIn => _configured && _supabase.auth.currentSession != null;
 
   @override
   void initState() {
     super.initState();
-    SupabaseRealtimePush.taps.listen((tap) => _showTap(tap));
+    if (!_configured || !SupabaseRealtimePush.isSupported) return;
+    _supabase.auth.onAuthStateChange.listen((state) async {
+      // Also covers sessions that end without the button (revoked, password
+      // changed): the next person on this phone must not get these.
+      if (state.event == AuthChangeEvent.signedOut) {
+        await SupabaseRealtimePush.stop(forgetDevice: true);
+      }
+      await _refresh();
+    });
+    SupabaseRealtimePush.taps.listen(_showTap);
     SupabaseRealtimePush.launchTap().then((tap) {
       if (tap != null) _showTap(tap);
     });
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
   }
 
   void _showTap(PushTap tap) {
@@ -39,40 +72,70 @@ class _PushDemoState extends State<PushDemo> {
   }
 
   Future<void> _refresh() async {
-    if (!SupabaseRealtimePush.isSupported) return;
-    final device = await SupabaseRealtimePush.device();
     final status = await SupabaseRealtimePush.status();
     final exempt = await SupabaseRealtimePush.isIgnoringBatteryOptimizations();
     if (!mounted) return;
     setState(() {
-      _device = device;
       _status = status;
       _exempt = exempt;
     });
   }
 
-  Future<void> _start() async {
+  // Shows the error instead of losing it in the console.
+  Future<void> _run(Future<void> Function() action) async {
+    setState(() => _error = null);
+    try {
+      await action();
+    } on Object catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+    await _refresh();
+  }
+
+  Future<void> _signIn() => _run(() async {
+    await _supabase.auth.signInWithPassword(
+      email: _email.text.trim(),
+      password: _password.text,
+    );
+  });
+
+  // The order matters: the database must know the device before the service
+  // asks it for a snapshot, or the first answer is `rejected`.
+  Future<void> _turnOn() => _run(() async {
     await SupabaseRealtimePush.requestNotificationPermission();
+    final device = await SupabaseRealtimePush.device();
+    await _supabase.rpc<void>(
+      'realtime_push_register',
+      params: device.registerParams,
+    );
     await SupabaseRealtimePush.start(
       supabaseUrl: Uri.parse(_supabaseUrl),
       publishableKey: _publishableKey,
     );
-    await _refresh();
-  }
+  });
 
-  Future<void> _stop() async {
-    await SupabaseRealtimePush.stop();
-    await _refresh();
-  }
+  // Unregister while the session is still valid, then forget the pair so the
+  // next user of this phone gets a new one.
+  Future<void> _signOut() => _run(() async {
+    final device = await SupabaseRealtimePush.device();
+    try {
+      await _supabase.rpc<void>(
+        'realtime_push_unregister',
+        params: device.unregisterParams,
+      );
+    } on Object {
+      // Offline: sign out anyway. The forgotten pair can no longer read
+      // anything.
+    }
+    await SupabaseRealtimePush.stop(forgetDevice: true);
+    await _supabase.auth.signOut();
+  });
 
-  Future<void> _askExemption() async {
-    await SupabaseRealtimePush.requestIgnoreBatteryOptimizations();
-    await _refresh();
-  }
+  Future<void> _askExemption() =>
+      _run(SupabaseRealtimePush.requestIgnoreBatteryOptimizations);
 
   @override
   Widget build(BuildContext context) {
-    final configured = _supabaseUrl.isNotEmpty && _publishableKey.isNotEmpty;
     return Scaffold(
       appBar: AppBar(title: const Text('supabase_realtime_push')),
       body: ListView(
@@ -80,23 +143,32 @@ class _PushDemoState extends State<PushDemo> {
         children: [
           if (!SupabaseRealtimePush.isSupported)
             const Text('This plugin runs on Android only.')
-          else ...[
-            if (!configured)
-              const Text(
-                'Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY: '
-                'flutter run --dart-define-from-file=.env',
-              ),
-            ListTile(title: const Text('Status'), subtitle: Text(_status.name)),
-            ListTile(
-              title: const Text('Device topic'),
-              subtitle: SelectableText(_device?.topic ?? '-'),
+          else if (!_configured)
+            const Text(
+              'Copy .env.example to .env, fill it in and run '
+              'flutter run --dart-define-from-file=.env',
+            )
+          else if (!_signedIn) ...[
+            TextField(
+              controller: _email,
+              decoration: const InputDecoration(labelText: 'Email'),
+              keyboardType: TextInputType.emailAddress,
             ),
-            const ListTile(
-              title: Text('1. Register the device'),
-              subtitle: Text(
-                'Signed in, call realtime_push_register with '
-                'device.registerParams from your own Supabase client.',
-              ),
+            TextField(
+              controller: _password,
+              decoration: const InputDecoration(labelText: 'Password'),
+              obscureText: true,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(onPressed: _signIn, child: const Text('Sign in')),
+          ] else ...[
+            ListTile(
+              title: const Text('User id (for realtime_push_send)'),
+              subtitle: SelectableText(_supabase.auth.currentUser?.id ?? '-'),
+            ),
+            ListTile(
+              title: const Text('Service'),
+              subtitle: Text(_status.name),
             ),
             ListTile(
               title: const Text('Battery exemption'),
@@ -115,12 +187,20 @@ class _PushDemoState extends State<PushDemo> {
             ListTile(title: const Text('Last tap'), subtitle: Text(_lastTap)),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: configured ? _start : null,
-              child: const Text('2. Start'),
+              onPressed: _status == PushStatus.running ? null : _turnOn,
+              child: const Text('Turn on notifications'),
             ),
             const SizedBox(height: 8),
-            OutlinedButton(onPressed: _stop, child: const Text('Stop')),
+            OutlinedButton(onPressed: _signOut, child: const Text('Sign out')),
           ],
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
         ],
       ),
     );
