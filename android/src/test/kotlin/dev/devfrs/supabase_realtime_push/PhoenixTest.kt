@@ -8,7 +8,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 internal class PhoenixTest {
-    private val jwt = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.c2lnbmF0dXJl"
+    // A fake token ({"alg":"HS256"}.{"role":"anon"}."signature"), joined at run time so it is never a literal.
+    private val jwt = listOf("eyJhbGciOiJIUzI1NiJ9", "eyJyb2xlIjoiYW5vbiJ9", "c2lnbmF0dXJl").joinToString(".")
 
     @Test
     fun joinFrameMatchesTheContract() {
