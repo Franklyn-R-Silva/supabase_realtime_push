@@ -1,8 +1,27 @@
 # supabase_realtime_push
 
-Push notifications on Android **without Firebase**. A native service holds one
-Supabase Realtime connection, and your database decides what the notification
-shade shows.
+A push notification is the message that pops up on a phone, like "Your order
+has shipped", even when the app is closed. On Android, apps almost always get
+them through Firebase, a Google service that needs Google's apps on the phone.
+
+This library does the same job without Google. It is for Android apps made
+with Flutter (a toolkit for building apps) that use Supabase (a ready-made
+database and server). A small helper on the phone keeps one connection open
+to the server, without starting the whole app. It works like a doorbell: when
+something changes, the server only rings the bell. The phone then asks "what
+should I show now?" and makes its notification list match the answer. If the
+connection drops, in an elevator or on weak Wi-Fi, the phone asks again once
+it is back, so nothing is lost. A message read on another phone disappears
+from this one.
+
+It is for company phones without Google, fleets that install the app from a
+file instead of the Play Store, and teams that run their own Supabase server.
+It is not for iPhones, which do not let an app keep a connection open in the
+background. If your app is on the Play Store and every user has Google, use
+Firebase: it shares one connection among all the apps on a phone. The cost is
+real: each phone holds a connection to your server all day, and unless the
+user lets the app skip battery saving, Android shows a small "connected"
+notification that stays.
 
 > **Status: work in progress, not published yet.** The design is in
 > [docs/contract.md](docs/contract.md).
