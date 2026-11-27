@@ -1,3 +1,5 @@
+// package:material_ui needs Flutter 3.47; the example still supports 3.32.
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:supabase_realtime_push/supabase_realtime_push.dart';
 
