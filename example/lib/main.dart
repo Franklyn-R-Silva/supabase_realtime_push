@@ -5,7 +5,7 @@ import 'package:supabase_realtime_push/supabase_realtime_push.dart';
 
 // Run with: flutter run --dart-define-from-file=.env (see .env.example).
 const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const _anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+const _publishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
 
 void main() => runApp(const MaterialApp(home: PushDemo()));
 
@@ -55,7 +55,7 @@ class _PushDemoState extends State<PushDemo> {
     await SupabaseRealtimePush.requestNotificationPermission();
     await SupabaseRealtimePush.start(
       supabaseUrl: Uri.parse(_supabaseUrl),
-      anonKey: _anonKey,
+      publishableKey: _publishableKey,
     );
     await _refresh();
   }
@@ -72,7 +72,7 @@ class _PushDemoState extends State<PushDemo> {
 
   @override
   Widget build(BuildContext context) {
-    final configured = _supabaseUrl.isNotEmpty && _anonKey.isNotEmpty;
+    final configured = _supabaseUrl.isNotEmpty && _publishableKey.isNotEmpty;
     return Scaffold(
       appBar: AppBar(title: const Text('supabase_realtime_push')),
       body: ListView(
@@ -83,7 +83,7 @@ class _PushDemoState extends State<PushDemo> {
           else ...[
             if (!configured)
               const Text(
-                'Set SUPABASE_URL and SUPABASE_ANON_KEY: '
+                'Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY: '
                 'flutter run --dart-define-from-file=.env',
               ),
             ListTile(title: const Text('Status'), subtitle: Text(_status.name)),

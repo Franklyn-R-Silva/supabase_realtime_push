@@ -10,7 +10,7 @@
 /// await supabase.rpc('realtime_push_register', params: device.registerParams);
 /// await SupabaseRealtimePush.start(
 ///   supabaseUrl: Uri.parse('https://xyz.supabase.co'),
-///   anonKey: supabaseAnonKey,
+///   publishableKey: supabasePublishableKey,
 /// );
 /// ```
 library;
@@ -146,7 +146,8 @@ abstract final class SupabaseRealtimePush {
   ///
   /// - [supabaseUrl]: the project URL, `https://<ref>.supabase.co` or your
   ///   self-hosted gateway.
-  /// - [anonKey]: the project's anon (publishable) key. Never the service key.
+  /// - [publishableKey]: the project's publishable key (`sb_publishable_…`),
+  ///   or the legacy anon key. Never a secret or service-role key.
   /// - [snapshotFunction]: the SQL function that returns the snapshot.
   /// - [channelName]: the notification channel name users see in settings.
   /// - [connectedTitle] and [connectedText]: the "connected" notification
@@ -155,7 +156,7 @@ abstract final class SupabaseRealtimePush {
   ///   when null.
   static Future<void> start({
     required Uri supabaseUrl,
-    required String anonKey,
+    required String publishableKey,
     String snapshotFunction = 'realtime_push_snapshot',
     String channelName = 'Notifications',
     String connectedTitle = 'Connected',
@@ -170,8 +171,12 @@ abstract final class SupabaseRealtimePush {
         'must be an http or https URL',
       );
     }
-    if (anonKey.trim().isEmpty) {
-      throw ArgumentError.value(anonKey, 'anonKey', 'must not be empty');
+    if (publishableKey.trim().isEmpty) {
+      throw ArgumentError.value(
+        publishableKey,
+        'publishableKey',
+        'must not be empty',
+      );
     }
     if (!_functionName.hasMatch(snapshotFunction)) {
       throw ArgumentError.value(
@@ -184,7 +189,7 @@ abstract final class SupabaseRealtimePush {
     _listenForTaps();
     await _channel.invokeMethod<void>('start', {
       'supabaseUrl': supabaseUrl.toString(),
-      'anonKey': anonKey,
+      'publishableKey': publishableKey,
       'snapshotFunction': snapshotFunction,
       'channelName': channelName,
       'connectedTitle': connectedTitle,

@@ -77,13 +77,13 @@ void main() {
     test('sends the whole configuration with its defaults', () async {
       await SupabaseRealtimePush.start(
         supabaseUrl: Uri.parse('https://xyz.supabase.co'),
-        anonKey: 'anon',
+        publishableKey: 'anon',
       );
 
       expect(calls.single.method, 'start');
       expect(calls.single.arguments, {
         'supabaseUrl': 'https://xyz.supabase.co',
-        'anonKey': 'anon',
+        'publishableKey': 'anon',
         'snapshotFunction': 'realtime_push_snapshot',
         'channelName': 'Notifications',
         'connectedTitle': 'Connected',
@@ -95,7 +95,10 @@ void main() {
     test('rejects a URL that is not http or https', () async {
       for (final url in ['wss://xyz.supabase.co', 'xyz.supabase.co', '']) {
         await expectLater(
-          SupabaseRealtimePush.start(supabaseUrl: Uri.parse(url), anonKey: 'k'),
+          SupabaseRealtimePush.start(
+            supabaseUrl: Uri.parse(url),
+            publishableKey: 'k',
+          ),
           throwsArgumentError,
           reason: url,
         );
@@ -107,7 +110,7 @@ void main() {
       await expectLater(
         SupabaseRealtimePush.start(
           supabaseUrl: Uri.parse('https://xyz.supabase.co'),
-          anonKey: '  ',
+          publishableKey: '  ',
         ),
         throwsArgumentError,
       );
@@ -120,7 +123,7 @@ void main() {
           await expectLater(
             SupabaseRealtimePush.start(
               supabaseUrl: Uri.parse('https://xyz.supabase.co'),
-              anonKey: 'anon',
+              publishableKey: 'anon',
               snapshotFunction: name,
             ),
             throwsArgumentError,
@@ -135,12 +138,12 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
       await expectLater(
-        SupabaseRealtimePush.start(supabaseUrl: Uri(), anonKey: 'k'),
+        SupabaseRealtimePush.start(supabaseUrl: Uri(), publishableKey: 'k'),
         throwsArgumentError,
       );
       await SupabaseRealtimePush.start(
         supabaseUrl: Uri.parse('https://xyz.supabase.co'),
-        anonKey: 'anon',
+        publishableKey: 'anon',
       );
       expect(calls, isEmpty);
     });

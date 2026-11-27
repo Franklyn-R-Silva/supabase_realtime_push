@@ -38,18 +38,21 @@ one, and the database needs no queue.
 
 ## 2. Realtime
 
-- URL: `<supabaseUrl with http→ws, https→wss>/realtime/v1/websocket?apikey=<anonKey>&vsn=1.0.0`
+- URL: `<supabaseUrl with http→ws, https→wss>/realtime/v1/websocket?apikey=<publishableKey>&vsn=1.0.0`
 - Join: topic `realtime:push:<topic>`, event `phx_join`, payload
-  `{"config":{"broadcast":{"self":false},"presence":{"key":""},"private":false},"access_token":"<anonKey>"}`.
-  `access_token` is what `realtime-js` sends and what Realtime's
-  `phx_join.schema.json` lists as required; servers up to v2.102.3 also accept
-  a join without it.
+  `{"config":{"broadcast":{"self":false},"presence":{"key":""},"private":false},"access_token":"<key>"}`.
+  `access_token` goes only when the key is a JWT (the legacy anon key,
+  `eyJ…`); a new opaque key (`sb_publishable_…`) is not a JWT and the join
+  leaves the field out. Servers up to v2.102.3 accept a join without it.
 - Heartbeat: topic `phoenix`, event `heartbeat`, payload `{}`, every 25 s. No
   reply within the next interval means the socket is dead: reconnect.
 - Any `broadcast` on the joined topic means "changed". Its payload is ignored.
 - After every successful join (first or reconnect) the service fetches the
   snapshot.
 - Reconnect backoff: 1, 2, 5, 10, 30 s, then every 30 s.
+- Supabase Cloud closes a public Realtime connection after at most 24 hours.
+  A server close after a long healthy session reconnects at once, without
+  growing the backoff.
 
 The topic must be **public** (`private: false`). Projects that turned off
 public Realtime access cannot use this package.
@@ -57,8 +60,12 @@ public Realtime access cannot use this package.
 ## 3. Snapshot
 
 `POST <supabaseUrl>/rest/v1/rpc/realtime_push_snapshot`
-(function name configurable in `start`), headers `apikey: <anonKey>` and
-`Authorization: Bearer <anonKey>`, body `{"p_topic": "...", "p_secret": "..."}`.
+(function name configurable in `start`), header `apikey: <publishableKey>`,
+body `{"p_topic": "...", "p_secret": "..."}`.
+
+The key goes in `apikey` only, never in `Authorization: Bearer`: the new keys
+are not JWTs and fail anything that parses one, and the API gateway puts the
+anon role in place when `Authorization` is missing.
 
 Response:
 
@@ -137,7 +144,7 @@ MethodChannel `supabase_realtime_push`.
 | Method | Arguments | Returns |
 |---|---|---|
 | `device` | — | `{topic, secret}` (creates them on first call) |
-| `start` | `{supabaseUrl, anonKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?}` | `null` |
+| `start` | `{supabaseUrl, publishableKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?}` | `null` |
 | `stop` | `{forgetDevice: bool}` | `null` |
 | `status` | — | `"stopped"`, `"running"` or `"rejected"` |
 | `isIgnoringBatteryOptimizations` | — | `bool` |
