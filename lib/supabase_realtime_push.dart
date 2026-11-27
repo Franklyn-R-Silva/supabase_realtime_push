@@ -142,7 +142,10 @@ abstract final class SupabaseRealtimePush {
   /// until [stop].
   ///
   /// Call it after the device is registered, while the app is on screen:
-  /// Android 12+ refuses to start a foreground service from the background.
+  /// Android 12+ refuses to start a foreground service from the background,
+  /// and the call then throws a [PlatformException] with code `start_failed`.
+  /// The service stays enabled, so the next start, a reboot or an app update
+  /// tries again.
   ///
   /// - [supabaseUrl]: the project URL, `https://<ref>.supabase.co` or your
   ///   self-hosted gateway.
@@ -186,7 +189,8 @@ abstract final class SupabaseRealtimePush {
       );
     }
     if (!isSupported) return;
-    _listenForTaps();
+    // No tap handler here: a tap with nobody listening to [taps] would be
+    // dropped, while the platform keeps it for [launchTap] until Dart asks.
     await _channel.invokeMethod<void>('start', {
       'supabaseUrl': supabaseUrl.toString(),
       'publishableKey': publishableKey,
