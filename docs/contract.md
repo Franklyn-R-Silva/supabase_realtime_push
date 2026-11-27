@@ -148,7 +148,7 @@ MethodChannel `supabase_realtime_push`.
 | `stop` | `{forgetDevice: bool}` | `null` |
 | `status` | — | `"stopped"`, `"running"` or `"rejected"` |
 | `isIgnoringBatteryOptimizations` | — | `bool` |
-| `requestIgnoreBatteryOptimizations` | — | `null` (opens the system dialog) |
+| `requestIgnoreBatteryOptimizations` | — | `null`. Opens the direct dialog when the **app's** manifest declares `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, the battery-optimization settings list otherwise. The plugin never declares that permission itself: Google Play allows it only for apps that cannot use FCM, and a merged manifest would put it in every app |
 | `requestNotificationPermission` | — | `bool` (Android 13+ runtime permission; `true` below 13) |
 | `launchTap` | — | `{id, data}` or `null`: the tap that opened the app |
 
