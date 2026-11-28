@@ -16,10 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# While the repository is private, the publish dry-run, pana and dependency
-# review stay out: `publish_to: none` fails the first two on purpose, and the
-# third needs GitHub Advanced Security on private repositories. They come back
-# in the go-public checklist.
 jobs:
   check:
     name: check
@@ -45,6 +41,15 @@ jobs:
       - name: Analyze
         run: flutter analyze --fatal-infos
 
+      # Catches packaging problems (a missing screenshot, a bad pubspec, an
+      # oversized archive) on the PR instead of at release time. The dry-run
+      # also fails on a dirty working tree, so the diff comes first and the
+      # failure arrives with its cause.
+      - name: Validate the published package
+        run: |
+          git --no-pager diff
+          flutter pub publish --dry-run
+
   test:
     name: test
     runs-on: ubuntu-latest
@@ -64,3 +69,79 @@ jobs:
 
       - name: Run tests
         run: flutter test
+
+  min-flutter:
+    name: min Flutter (3.44.9)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Every other job runs on the newest SDK, where an API added after the
+      # floor compiles fine. Keep this on the newest patch of the pubspec's
+      # `flutter:` lower bound.
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: 3.44.9
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Errors and warnings only: infos are style, judged on stable in `check`.
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      # The Kotlin side builds inside the host app, with that app's Android
+      # Gradle plugin and Kotlin. The example pins its own, so a fresh app from
+      # this SDK's template is what a user on the floor actually builds.
+      - name: Build a new app that depends on the plugin
+        working-directory: ${{ runner.temp }}
+        run: |
+          flutter create --platforms=android --project-name min_app min_app
+          cd min_app
+          flutter pub add "supabase_realtime_push:{\"path\":\"$GITHUB_WORKSPACE\"}"
+          flutter build apk --debug
+
+  pana:
+    name: pana
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      # pub.dev scores every upload with pana, and a lost point is only seen
+      # after the version is published for good. It checks what the jobs above
+      # do not: dartdoc coverage, that the lower bounds of the constraints still
+      # resolve and analyze, and platform support. Unpinned on purpose: pub.dev
+      # always scores with the latest pana. Threshold 0 = fail on any point
+      # below the maximum. pana converts the pubspec screenshots to WebP; without
+      # these tools that section scores 0.
+      - name: Score the package as pub.dev will
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq webp
+          dart pub global activate pana
+          dart pub global run pana --exit-code-threshold 0 .
+
+  dependency-review:
+    name: dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Dependabot alerts only fire once a vulnerable version is on main; this
+      # stops a PR from bringing one in (a pub package or an action).
+      - uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
