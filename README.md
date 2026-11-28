@@ -64,10 +64,13 @@ file instead of the Play Store, and teams that run their own Supabase server.
 It is not for iPhones, which do not let an app keep a connection open in the
 background. If your app is on the Play Store and every user has Google, use
 Firebase: it shares one connection among all the apps on a phone. The cost is
-real: each phone holds a connection to your server while its screen is on,
-and unless the user lets the app skip battery saving, Android shows a small
-"connected" notification. The user can hide it, and on Android 14 and later
-swipe it away (see [Battery](#battery-and-the-connected-notification)).
+real: each phone holds a connection to your server while its screen is on.
+Android also shows a small "connected" notification unless the app is exempt
+from battery optimization. Ask for the exemption once when the user turns
+notifications on (one tap, or none on a managed fleet) and it goes away. If
+you cannot ask, `start(foregroundService: false)` never shows it, and
+notifications then arrive more slowly with the app closed (see
+[Battery](#battery-and-the-connected-notification)).
 
 ## Contents
 
@@ -190,6 +193,10 @@ Google Play's policy allows it for your app (see
 final supabase = Supabase.instance.client;
 
 await SupabaseRealtimePush.requestNotificationPermission();
+// No "connected" notification once granted; see Battery below.
+if (!await SupabaseRealtimePush.isIgnoringBatteryOptimizations()) {
+  await SupabaseRealtimePush.requestIgnoreBatteryOptimizations();
+}
 final device = await SupabaseRealtimePush.device();
 await supabase.rpc('realtime_push_register', params: device.registerParams);
 await SupabaseRealtimePush.start(
@@ -393,27 +400,40 @@ await SupabaseRealtimePush.start(
 ## Battery and the "connected" notification
 
 Android stops a background service about a minute after the app leaves the
-screen, unless the app is exempt from battery optimization.
+screen, unless the app is exempt from battery optimization. Without the
+exemption the service has to run in the foreground, and Android requires a
+notification while it does: the low-priority "connected" one
+(`connectedTitle`, `connectedText`). So a phone runs in one of three ways:
 
-- **Not exempt:** the service runs in the foreground, and Android requires a
-  low-priority "connected" notification while it does (`connectedTitle`,
-  `connectedText`).
-- **Exempt:** no notification. Ask with
-  `SupabaseRealtimePush.requestIgnoreBatteryOptimizations()`.
-- **Hiding it without the exemption:** the user can turn off just that
-  notification's category, and the service keeps running.
-  `SupabaseRealtimePush.openConnectedNotificationSettings()` opens that
-  category, so your app can offer a "hide" button. On Android 14 and later the
-  user can also swipe the notification away; it comes back only when the
-  service starts again, after a reboot for instance.
+| | "Connected" notification | App closed, screen on | Screen off |
+|---|---|---|---|
+| **Exempt** (recommended) | none | a second or two | up to about 5 minutes (15 in deep Doze) |
+| **Not exempt** (the default) | shown, low priority; the user can hide it | a second or two | up to about 5 minutes, or Doze's next maintenance window |
+| **Not exempt, `foregroundService: false`** | never | every 5 minutes or more | the same, stretched to an hour or more for an app seldom opened |
 
-`smallIcon` is looked up by name. If your release build shrinks resources,
-keep that drawable (`tools:keep="@drawable/<name>"` in `res/raw/keep.xml`), or
-the status bar falls back to the app icon.
+With the app open, notifications arrive in a second or two in every mode.
 
-Without the exemption, Android also cuts the network in Doze (screen off,
-phone still for a while), so a notification can wait for the next maintenance
-window. Exempt apps keep the network.
+### Ask for the exemption when notifications are turned on
+
+This is the fix for the notification, and it gives the best delivery: exempt
+apps also keep the network in Doze, Android's idle mode for a phone left
+still.
+
+```dart
+if (!await SupabaseRealtimePush.isIgnoringBatteryOptimizations()) {
+  await SupabaseRealtimePush.requestIgnoreBatteryOptimizations();
+}
+```
+
+- Declare `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` in your app's
+  `AndroidManifest.xml` to get the direct one-tap dialog. Without it, the call
+  opens the battery-optimization list, where the user has to find the app.
+  The package never declares it for you (see Google Play below).
+- A user who grants it later loses the notification at the service's next
+  check, within a few minutes, or at once when the app is next opened.
+- **Company fleets:** many device management (MDM) tools can put an app on the
+  battery-optimization allowlist of every phone, so nobody has to tap
+  anything. Look for "battery optimization" in your MDM's app policies.
 
 **Google Play:** asking for the exemption directly is
 [acceptable](https://developer.android.com/training/monitoring-device-state/doze-standby#exemption-cases)
@@ -423,6 +443,28 @@ not to use FCM is not enough. Apps distributed outside Play, such as company
 fleets installing an APK, are not bound by that policy. Apps targeting Android
 14+ on Play also declare the `remoteMessaging` foreground service type in the
 Play Console.
+
+### Without the exemption
+
+- **The default** keeps the connection with the "connected" notification. The
+  user can turn off just that notification's category and the service keeps
+  running: `SupabaseRealtimePush.openConnectedNotificationSettings()` opens it,
+  so your app can offer a "hide" button. On Android 14 and later the user can
+  also swipe the notification away; it comes back only when the service starts
+  again, after a reboot for instance. Android cuts the network in Doze, so a
+  notification can wait for the next maintenance window.
+- **`start(foregroundService: false)`** never shows the notification. The
+  connection is held while the app is open, and Android stops the service
+  about a minute after it closes. From then on an alarm reads the snapshot
+  every 5 minutes or more. Android decides how much more: the check is put off
+  in Doze, and an app the user seldom opens gets about one an hour, or one a
+  day once Android restricts it. Use it when a delay is acceptable and asking
+  for the exemption is not, for example digests or reminders. Chat needs the
+  exemption.
+
+`smallIcon` is looked up by name. If your release build shrinks resources,
+keep that drawable (`tools:keep="@drawable/<name>"` in `res/raw/keep.xml`), or
+the status bar falls back to the app icon.
 
 Some manufacturers kill background apps more aggressively than Android does.
 If notifications stop on one brand, see [dontkillmyapp.com](https://dontkillmyapp.com).
@@ -475,7 +517,7 @@ adb logcat -s SupabaseRealtimePush
 | `socket failed HTTP 429` | The Realtime connection limit; see [Self-hosted Supabase](#self-hosted-supabase-raise-the-realtime-connection-limit-first) |
 | `join refused (error)` | Public Realtime channels are turned off in the project |
 | `the server does not know this device` | The device is not registered (status `rejected`): register it and `start` again |
-| `foreground not allowed from the background` | Android 12+ killed the service and the app is not exempt; it comes back when the app opens |
+| `foreground not allowed from the background` | Android 12+ killed the service and the app is not exempt; it comes back when the app opens, and until then the watchdog reads the snapshot every few minutes |
 | Nothing at all | `start` was never called on this install (`status()` is `stopped`) |
 
 ## Feedback and contributing

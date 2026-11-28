@@ -123,6 +123,7 @@ class SupabaseRealtimePushPlugin :
             smallIcon = text("smallIcon"),
             channels = call.argument<Map<String, String>>("channels").orEmpty()
                 .filter { (id, name) -> id.isNotBlank() && name.isNotBlank() },
+            foregroundService = call.argument<Boolean>("foregroundService") != false,
         )
         val store = Store(context)
         store.credentialsOrCreate()

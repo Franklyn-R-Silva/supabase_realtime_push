@@ -15,8 +15,8 @@ internal class StoreTest {
     private val store = Store(context)
 
     @Test
-    fun keepsTheConfigWithItsChannelsUntilCleared() {
-        val config = Config("https://x.supabase.co", "key", "snap", "Messages", "Connected", "Waiting", "ic_push", mapOf("offers" to "Offers"))
+    fun keepsTheWholeConfigUntilCleared() {
+        val config = Config("https://x.supabase.co", "key", "snap", "Messages", "Connected", "Waiting", "ic_push", mapOf("offers" to "Offers"), foregroundService = false)
 
         store.config = config
         assertEquals(config, Store(context).config)

@@ -29,7 +29,9 @@ out. Every step is explained in the
 ## Try it
 
 1. Sign in with that user.
-2. Tap **Turn on notifications** and allow them. **Service** turns `running`.
+2. Tap **Turn on notifications**, allow them, and allow the app to ignore
+   battery optimization when Android asks: then there is no "connected"
+   notification. **Service** turns `running`.
 3. Copy the **User id** shown on the screen and send a notification from the
    SQL editor:
 
@@ -46,8 +48,9 @@ out. Every step is explained in the
    Swipe the app away from recents and send again: the notification still
    arrives, because the service keeps its own connection.
 4. Tap the notification. The app opens and **Last tap** shows its id and data.
-5. **Battery exemption:** until you grant it, Android keeps a "connected"
-   notification on screen. Tap **Ask** to remove it, or **Settings** on the
-   row below to turn that notification off while the service keeps running.
+5. **Battery exemption:** if you refused it, Android keeps a "connected"
+   notification on screen. Tap **Ask** to grant it after all, or **Settings**
+   on the row below to turn that notification off while the service keeps
+   running.
 6. **Sign out** unregisters the phone and stops the service, so this user's
    notifications stop arriving on it.

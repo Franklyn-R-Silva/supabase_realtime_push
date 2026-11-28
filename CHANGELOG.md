@@ -23,3 +23,9 @@
 - Notification channels and pictures: `start(channels: {...})` declares more
   channels, a snapshot entry picks one with `"channel"`, and `"largeIcon"`
   shows an https picture, such as the sender's avatar, beside the text.
+- `start(foregroundService: false)` never shows the "connected" notification:
+  without the battery exemption the connection is held while the app is open,
+  and with it closed a periodic check reads the snapshot. That check now also
+  runs after Android kills the service, so notifications keep arriving, late,
+  until the app opens again. The README and the example ask for the
+  exemption when notifications are turned on.

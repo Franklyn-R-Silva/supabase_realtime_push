@@ -168,6 +168,10 @@ tap, even when Android hands back the intent of the tap that first opened it.
   background service about a minute after the app leaves the screen.
   `remoteMessaging` has no daily time limit and may be started from
   `BOOT_COMPLETED`.
+- **Not exempt, `foregroundService: false`**: never the foreground and never
+  the "connected" notification. A plain background service while the app is
+  open, which Android stops about a minute after it closes; from then on the
+  watchdog reads the snapshot without the service (below).
 - The choice is re-made on every start command, so granting the exemption later
   removes the "connected" notification.
 - The user may hide the "connected" notification: turning off its channel
@@ -175,13 +179,19 @@ tap, even when Android hands back the intent of the tap that first opened it.
   dismisses it. The service keeps running either way, and the notification is
   not posted again until the service enters the foreground again.
 - `START_STICKY`, restarted after reboot and app update, and checked by a
-  periodic watchdog (an inexact alarm allowed while idle, about every 5 min).
+  periodic watchdog: an inexact alarm allowed while idle, about every 5 min,
+  that Android defers in Doze and by app standby bucket. The alarm is a
+  broadcast to `WatchReceiver`, which hands it to the service when Android lets
+  it start (in the foreground, exempt, or the app on screen); otherwise it
+  reads the snapshot itself, under a wake lock, and sets the next alarm first.
+  A `rejected` answer ends the watchdog.
 - Not exempt, on Android 12+: when the system kills the process, neither the
   `START_STICKY` restart nor the watchdog may start a foreground service from
-  the background, so the service stays down (and stops itself if it was
-  restarted without the foreground) until the app is opened. Every app launch
-  starts it again while the status is `running`, which means "turned on", not
-  "connected right now".
+  the background, so the service stays down until the app is opened, and the
+  watchdog keeps reading the snapshot meanwhile. A boot or an update that may
+  not start the service sets the watchdog instead (a reboot clears alarms).
+  Every app launch starts the service again while the status is `running`,
+  which means "turned on", not "connected right now".
 - With the screen off a dropped socket is not reconnected: the CPU sleeps, the
   heartbeat stalls and the server closes the socket within a minute, so
   reconnecting would cost a handshake, a join and a snapshot every minute all
@@ -195,7 +205,7 @@ MethodChannel `supabase_realtime_push`.
 | Method | Arguments | Returns |
 |---|---|---|
 | `device` | — | `{topic, secret}` (creates them on first call) |
-| `start` | `{supabaseUrl, publishableKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?, channels}` (`channels`: id → name, Android channel id `supabase_realtime_push_messages.<id>`) | `null`. Errors: `bad_arguments`; `start_failed` when Android refuses to start the service (from the background on Android 12+). The status stays `running`, so the next `start`, a reboot or an app update tries again |
+| `start` | `{supabaseUrl, publishableKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?, channels, foregroundService}` (`channels`: id → name, Android channel id `supabase_realtime_push_messages.<id>`; `foregroundService`: `false` never enters the foreground, section 5) | `null`. Errors: `bad_arguments`; `start_failed` when Android refuses to start the service (from the background on Android 12+). The status stays `running`, so the next `start`, a reboot or an app update tries again |
 | `stop` | `{forgetDevice: bool}` | `null` |
 | `status` | — | `"stopped"`, `"running"` or `"rejected"`. `"stopped"` also when this install has no device pair: Auto Backup restores the settings on a reinstall or a new phone, never the pair |
 | `isIgnoringBatteryOptimizations` | — | `bool` |

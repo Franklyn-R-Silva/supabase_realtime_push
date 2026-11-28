@@ -163,6 +163,12 @@ abstract final class SupabaseRealtimePush {
   ///   settings, so they can mute one kind (offers, say) and keep another. A
   ///   snapshot entry with `"channel": "<id>"` posts to that channel; any
   ///   other goes to [channelName].
+  /// - [foregroundService]: with `false`, Android never shows the "connected"
+  ///   notification. Without the battery exemption the connection is then
+  ///   held only while the app is open, and with it closed a periodic check
+  ///   reads the snapshot every 5 minutes or more: Android stretches it to an
+  ///   hour or longer in Doze and for an app seldom opened. With the
+  ///   exemption nothing changes: there is no notification either way.
   static Future<void> start({
     required Uri supabaseUrl,
     required String publishableKey,
@@ -172,6 +178,7 @@ abstract final class SupabaseRealtimePush {
     String connectedText = 'Waiting for new notifications',
     String? smallIcon,
     Map<String, String> channels = const {},
+    bool foregroundService = true,
   }) async {
     if (!supabaseUrl.isScheme('https') && !supabaseUrl.isScheme('http') ||
         supabaseUrl.host.isEmpty) {
@@ -216,6 +223,7 @@ abstract final class SupabaseRealtimePush {
       'connectedText': connectedText,
       'smallIcon': smallIcon,
       'channels': channels,
+      'foregroundService': foregroundService,
     });
   }
 

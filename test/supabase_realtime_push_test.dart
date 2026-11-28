@@ -90,7 +90,17 @@ void main() {
         'connectedText': 'Waiting for new notifications',
         'smallIcon': null,
         'channels': <String, String>{},
+        'foregroundService': true,
       });
+    });
+
+    test('sends foregroundService', () async {
+      await SupabaseRealtimePush.start(
+        supabaseUrl: Uri.parse('https://xyz.supabase.co'),
+        publishableKey: 'anon',
+        foregroundService: false,
+      );
+      expect((calls.single.arguments as Map)['foregroundService'], false);
     });
 
     test('sends the extra channels and rejects empty ids or names', () async {
