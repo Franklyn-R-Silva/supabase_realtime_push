@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Reply action on notifications that offer it. Translate by defining the same
+         names in your app's res/values-<language>/strings.xml. -->
+    <string name="supabase_realtime_push_reply">Reply</string>
+    <string name="supabase_realtime_push_reply_failed">Not sent</string>
+</resources>

@@ -78,6 +78,7 @@ notification that stays.
   [sign out](#4-sign-out) · [send](#5-send-a-notification) ·
   [taps](#6-handle-taps)
 - [Your own data instead of the inbox](#your-own-data-instead-of-the-inbox)
+- [Reply from the notification](#reply-from-the-notification)
 - [Battery and the "connected" notification](#battery-and-the-connected-notification)
 - [Security](#security)
 - [Limits](#limits)
@@ -133,6 +134,8 @@ It is idempotent and creates, in `public`:
 | `realtime_push_mark_read(p_key)` | the app, signed in | Clears that notification on every device |
 | `realtime_push_snapshot_for(p_user)` | the snapshot | **Yours to replace** (see below) |
 | `realtime_push_signal(p_users)` | your triggers | Wakes those users' devices |
+| `realtime_push_reply(p_topic, p_secret, p_id, p_text)` | the service (`anon`) | Takes a reply typed in the notification |
+| `realtime_push_reply_for(p_user, p_id, p_text)` | the reply | **Yours to replace** ([reply](#reply-from-the-notification)) |
 
 #### Self-hosted Supabase: raise the Realtime connection limit first
 
@@ -309,6 +312,46 @@ create trigger chat_message_signal after insert on public.chat_messages
 - Running `realtime_push.sql` again keeps your version; drop the function
   first to get the default back.
 - The shape is in [doc/contract.md §3](doc/contract.md#3-snapshot).
+
+## Reply from the notification
+
+Like a chat app: the user answers from the notification shade without opening
+the app. Add `'reply', true` to the notifications that take a reply in your
+`realtime_push_snapshot_for` (the one above), then replace the function that
+receives the text:
+
+```sql
+create or replace function public.realtime_push_reply_for(p_user uuid, p_id text, p_text text)
+returns void language plpgsql
+set search_path = public, pg_temp as $$
+declare
+  v_chat bigint := substring(p_id from '^chat:(\d+)$')::bigint;
+begin
+  -- p_id comes from the phone: check that this user is in that chat
+  if not exists (select 1 from chat_members where chat_id = v_chat and user_id = p_user) then
+    raise exception 'not a member' using errcode = '42501';
+  end if;
+  insert into chat_messages (chat_id, sender_id, text) values (v_chat, p_user, p_text);
+  -- the user has read the chat by replying: clear it, or it comes back
+  update chat_members set last_read_at = now() where chat_id = v_chat and user_id = p_user;
+end $$;
+```
+
+- The phone removes the notification once the reply is saved. If it is not
+  (offline, an error in your function), the notification says "Not sent",
+  keeps the text under it and offers Reply again.
+- Raise to refuse a reply; it reaches the phone as "Not sent".
+- The ready-made inbox is one-way: it never offers Reply, and the default
+  `realtime_push_reply_for` refuses every reply until you replace it.
+- "Reply" and "Not sent" are Android strings. Translate them in your app,
+  for example `android/app/src/main/res/values-pt/strings.xml`:
+
+  ```xml
+  <resources>
+      <string name="supabase_realtime_push_reply">Responder</string>
+      <string name="supabase_realtime_push_reply_failed">Não enviada</string>
+  </resources>
+  ```
 
 ## Battery and the "connected" notification
 

@@ -5,8 +5,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 internal class ReconcileTest {
-    private fun n(id: String, revision: Long, silent: Boolean = false, title: String = "title $id", body: String? = null, data: String? = null) =
-        SnapshotNotification(id, revision, title, body, silent, data)
+    private fun n(
+        id: String,
+        revision: Long,
+        silent: Boolean = false,
+        title: String = "title $id",
+        body: String? = null,
+        data: String? = null,
+        reply: Boolean = false,
+    ) = SnapshotNotification(id, revision, title, body, silent, data, reply)
 
     private fun snapshot(vararg notifications: SnapshotNotification, badge: Int? = null) = Snapshot(badge, notifications.toList())
 
@@ -139,6 +146,9 @@ internal class ReconcileTest {
         assertEquals(listOf("c"), next(first, snapshot(n("a", 1), n("b", 1), n("c", 1, body = "now"), n("d", 1), n("e", 1))).posts())
         assertEquals(listOf("d"), next(first, snapshot(n("a", 1), n("b", 1), n("c", 1), n("d", 1, data = "{}"), n("e", 1))).posts())
         assertEquals(listOf("e"), next(first, snapshot(n("a", 1), n("b", 1), n("c", 1), n("d", 1), n("e", 1, silent = true))).posts())
+        val replyOn = next(first, snapshot(n("a", 1, reply = true), n("b", 1), n("c", 1), n("d", 1), n("e", 1)))
+        assertEquals(listOf("a"), replyOn.posts())
+        assertTrue(replyOn.alerts().isEmpty())
 
         val grew = next(first, snapshot(n("a", 1), n("b", 2), n("c", 1), n("d", 1), n("e", 1)))
         assertEquals(listOf("b"), grew.posts())
