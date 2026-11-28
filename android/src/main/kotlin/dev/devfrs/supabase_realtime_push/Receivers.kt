@@ -57,6 +57,8 @@ internal class ReplyReceiver : BroadcastReceiver() {
             silent = false,
             data = intent.getStringExtra(Shade.EXTRA_DATA),
             reply = true,
+            channel = intent.getStringExtra(Shade.EXTRA_CHANNEL),
+            largeIcon = intent.getStringExtra(Shade.EXTRA_LARGE_ICON),
         )
         val pending = goAsync()
         thread(name = "supabase-realtime-push-reply") {

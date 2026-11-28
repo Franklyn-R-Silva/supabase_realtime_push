@@ -20,3 +20,6 @@
   Reply action, the text goes to the new `realtime_push_reply`, which hands it
   to your `realtime_push_reply_for`, and a reply that fails says "Not sent" on
   the notification and keeps the text.
+- Notification channels and pictures: `start(channels: {...})` declares more
+  channels, a snapshot entry picks one with `"channel"`, and `"largeIcon"`
+  shows an https picture, such as the sender's avatar, beside the text.

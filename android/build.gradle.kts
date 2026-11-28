@@ -78,4 +78,9 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     // The android.jar of JVM tests has only stubs of org.json.
     testImplementation("org.json:json:20260814")
+    // Shade and Store need a real NotificationManager and SharedPreferences.
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("junit:junit:4.13.2")
+    // Robolectric runs on JUnit 4: this engine runs those tests on the JUnit Platform with the others.
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.10.1")
 }

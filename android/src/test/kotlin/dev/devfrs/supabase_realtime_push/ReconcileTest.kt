@@ -165,6 +165,17 @@ internal class ReconcileTest {
     }
 
     @Test
+    fun aNewChannelOrLargeIconAtTheSameRevisionIsAQuietUpdate() {
+        val first = planFor(snapshot(n("a", 1)), shown = emptySet())
+
+        for (changed in listOf(n("a", 1).copy(channel = "offers"), n("a", 1).copy(largeIcon = "https://x/a.png"))) {
+            val plan = next(first, snapshot(changed))
+            assertEquals(listOf("a"), plan.posts())
+            assertTrue(plan.alerts().isEmpty())
+        }
+    }
+
+    @Test
     fun theBadgeRidesOnTheFirstAndMovesWithIt() {
         val first = planFor(snapshot(n("a", 1), n("b", 1), badge = 2), shown = emptySet())
         assertEquals(listOf(2, null), first.post.map { it.badge })

@@ -50,6 +50,22 @@ internal class SnapshotTest {
     }
 
     @Test
+    fun readsTheChannelAndOnlyAnHttpsLargeIcon() {
+        val snapshot = parseSnapshot(
+            """
+            {"notifications": [
+              {"id": "a", "revision": 1, "title": "T", "channel": "offers", "largeIcon": "https://x/a.png"},
+              {"id": "b", "revision": 1, "title": "T", "channel": 7, "largeIcon": "http://x/a.png"},
+              {"id": "c", "revision": 1, "title": "T", "largeIcon": "file:///sdcard/a.png"}
+            ]}
+            """,
+        )!!
+
+        assertEquals(listOf("offers", null, null), snapshot.notifications.map { it.channel })
+        assertEquals(listOf("https://x/a.png", null, null), snapshot.notifications.map { it.largeIcon })
+    }
+
+    @Test
     fun optionalFieldsHaveDefaults() {
         val snapshot = parseSnapshot("""{"notifications":[{"id":"a","revision":1,"title":"T","body":null,"data":null}]}""")!!
 
