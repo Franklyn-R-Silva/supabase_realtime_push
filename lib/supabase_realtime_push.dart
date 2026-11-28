@@ -243,6 +243,15 @@ abstract final class SupabaseRealtimePush {
     await _channel.invokeMethod<void>('requestIgnoreBatteryOptimizations');
   }
 
+  /// Opens the system settings of the "connected" notification alone, so the
+  /// user can turn it off while the service keeps running. Before Android 8,
+  /// which has no notification categories, the app's settings page. On
+  /// Android 14+ the user can also just swipe that notification away.
+  static Future<void> openConnectedNotificationSettings() async {
+    if (!isSupported) return;
+    await _channel.invokeMethod<void>('openConnectedNotificationSettings');
+  }
+
   /// Asks for the notification permission (Android 13+). True when granted,
   /// and always true below Android 13.
   static Future<bool> requestNotificationPermission() async {

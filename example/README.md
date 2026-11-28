@@ -47,6 +47,7 @@ out. Every step is explained in the
    arrives, because the service keeps its own connection.
 4. Tap the notification. The app opens and **Last tap** shows its id and data.
 5. **Battery exemption:** until you grant it, Android keeps a "connected"
-   notification on screen. Tap **Ask** to remove it.
+   notification on screen. Tap **Ask** to remove it, or **Settings** on the
+   row below to turn that notification off while the service keeps running.
 6. **Sign out** unregisters the phone and stops the service, so this user's
    notifications stop arriving on it.

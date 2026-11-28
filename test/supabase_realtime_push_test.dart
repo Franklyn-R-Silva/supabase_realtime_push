@@ -240,6 +240,7 @@ void main() {
       isFalse,
     );
     await SupabaseRealtimePush.requestIgnoreBatteryOptimizations();
+    await SupabaseRealtimePush.openConnectedNotificationSettings();
     expect(await SupabaseRealtimePush.requestNotificationPermission(), isFalse);
     expect(await SupabaseRealtimePush.launchTap(), isNull);
     expect(calls, isEmpty);

@@ -64,9 +64,10 @@ file instead of the Play Store, and teams that run their own Supabase server.
 It is not for iPhones, which do not let an app keep a connection open in the
 background. If your app is on the Play Store and every user has Google, use
 Firebase: it shares one connection among all the apps on a phone. The cost is
-real: each phone holds a connection to your server all day, and unless the
-user lets the app skip battery saving, Android shows a small "connected"
-notification that stays.
+real: each phone holds a connection to your server while its screen is on,
+and unless the user lets the app skip battery saving, Android shows a small
+"connected" notification. The user can hide it, and on Android 14 and later
+swipe it away (see [Battery](#battery-and-the-connected-notification)).
 
 ## Contents
 
@@ -139,8 +140,13 @@ It is idempotent and creates, in `public`:
 
 #### Self-hosted Supabase: raise the Realtime connection limit first
 
-Every device keeps one Realtime connection open all day, and an open app's own
-Supabase client holds another. Self-hosted Realtime accepts **200** concurrent
+Every device keeps one Realtime connection open while its screen is on (with
+the screen off the processor sleeps and the connection drops within a minute;
+the service reconnects when the screen turns on), and an open app's own
+Supabase client holds another. So the peak is the phones whose screen is on,
+or whose processor another app keeps awake (music, navigation), at the same
+time, not every phone: size the limit for your busiest hour, with room to
+spare. Self-hosted Realtime accepts **200** concurrent
 connections per tenant by default and refuses the rest with `429 Too many
 connected users`. Refused phones silently stop getting notifications.
 
@@ -363,6 +369,12 @@ screen, unless the app is exempt from battery optimization.
   `connectedText`).
 - **Exempt:** no notification. Ask with
   `SupabaseRealtimePush.requestIgnoreBatteryOptimizations()`.
+- **Hiding it without the exemption:** the user can turn off just that
+  notification's category, and the service keeps running.
+  `SupabaseRealtimePush.openConnectedNotificationSettings()` opens that
+  category, so your app can offer a "hide" button. On Android 14 and later the
+  user can also swipe the notification away; it comes back only when the
+  service starts again, after a reboot for instance.
 
 `smallIcon` is looked up by name. If your release build shrinks resources,
 keep that drawable (`tools:keep="@drawable/<name>"` in `res/raw/keep.xml`), or
@@ -408,8 +420,8 @@ Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
   fetches the snapshot; turning the screen on reconnects at once. FCM does not
   have this limit, because Google holds that connection for every app.
 - Android only.
-- One Realtime connection per device, all day (see the self-hosted limit
-  above).
+- One Realtime connection per device while its screen is on (see the
+  self-hosted limit above).
 - Supabase Cloud closes public Realtime connections after 24 hours; the service
   reconnects at once.
 - The topic must be public: projects that disabled public Realtime channels
