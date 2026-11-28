@@ -65,3 +65,11 @@ jobs:
       - uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
           category: /language:${{ matrix.language }}
+
+      # TEMP: verification only, removed before merge.
+      - if: matrix.build-mode == 'manual'
+        name: TEMP list extracted Kotlin
+        run: |
+          unzip -l "$RUNNER_TEMP/codeql_databases/java/src.zip" | grep -E '\.(kt|java)$' || true
+          jq -c '.runs[0].properties.metricResults' "$GITHUB_WORKSPACE/../results/java.sarif" || true
+          jq -c '.runs[0].invocations[].toolExecutionNotifications[] | {id: .descriptor.id, level, uri: .locations[0].physicalLocation.artifactLocation.uri, msg: .message.text}' "$GITHUB_WORKSPACE/../results/java.sarif" | grep -v -E '"uri":"[^"]*\.java"' | head -100 || true
