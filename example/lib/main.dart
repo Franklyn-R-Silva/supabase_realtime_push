@@ -184,6 +184,19 @@ class _PushDemoState extends State<PushDemo> {
                       child: const Text('Ask'),
                     ),
             ),
+            if (!_exempt)
+              ListTile(
+                title: const Text('"Connected" notification'),
+                subtitle: const Text(
+                  'Turn it off in its settings: the service keeps running',
+                ),
+                trailing: TextButton(
+                  onPressed: () => _run(
+                    SupabaseRealtimePush.openConnectedNotificationSettings,
+                  ),
+                  child: const Text('Settings'),
+                ),
+              ),
             ListTile(title: const Text('Last tap'), subtitle: Text(_lastTap)),
             const SizedBox(height: 8),
             FilledButton(

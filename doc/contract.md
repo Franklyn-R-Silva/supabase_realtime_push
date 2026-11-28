@@ -166,6 +166,10 @@ tap, even when Android hands back the intent of the tap that first opened it.
   `BOOT_COMPLETED`.
 - The choice is re-made on every start command, so granting the exemption later
   removes the "connected" notification.
+- The user may hide the "connected" notification: turning off its channel
+  (`supabase_realtime_push_connection`) hides it, and on Android 14+ a swipe
+  dismisses it. The service keeps running either way, and the notification is
+  not posted again until the service enters the foreground again.
 - `START_STICKY`, restarted after reboot and app update, and checked by a
   periodic watchdog (an inexact alarm allowed while idle, about every 5 min).
 - Not exempt, on Android 12+: when the system kills the process, neither the
@@ -192,6 +196,7 @@ MethodChannel `supabase_realtime_push`.
 | `status` | — | `"stopped"`, `"running"` or `"rejected"`. `"stopped"` also when this install has no device pair: Auto Backup restores the settings on a reinstall or a new phone, never the pair |
 | `isIgnoringBatteryOptimizations` | — | `bool` |
 | `requestIgnoreBatteryOptimizations` | — | `null`. Opens the direct dialog when the **app's** manifest declares `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, the battery-optimization settings list otherwise. The plugin never declares that permission itself: Google Play allows it only for apps that cannot use FCM, and a merged manifest would put it in every app |
+| `openConnectedNotificationSettings` | — | `null`. Opens the system settings of the `supabase_realtime_push_connection` channel (created first, so the page is never empty); before Android 8, which has no channels, the app's details page |
 | `requestNotificationPermission` | — | `bool` (Android 13+ runtime permission; `true` below 13) |
 | `launchTap` | — | `{id, data}` or `null`: the tap that opened the app |
 
@@ -227,8 +232,9 @@ unread row. It never sets `reply`.
 
 ## 8. Self-hosted Realtime
 
-Every device holds one connection all day, and an open app's own Supabase
-client holds another. Realtime refuses new connections past the tenant's
+Every device holds one connection while its screen is on (§5: with the screen
+off the socket drops and the service waits for the screen to reconnect), and
+an open app's own Supabase client holds another. Realtime refuses new connections past the tenant's
 `max_concurrent_users` with `429 Too many connected users`, and the refused
 device silently stops getting notifications.
 

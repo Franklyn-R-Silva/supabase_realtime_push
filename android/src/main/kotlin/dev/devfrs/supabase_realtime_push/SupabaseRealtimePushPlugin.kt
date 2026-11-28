@@ -90,6 +90,10 @@ class SupabaseRealtimePushPlugin :
                     requestIgnoreBatteryOptimizations()
                     result.success(null)
                 }
+                "openConnectedNotificationSettings" -> {
+                    openConnectedNotificationSettings()
+                    result.success(null)
+                }
                 "requestNotificationPermission" -> requestNotificationPermission(result)
                 "launchTap" -> {
                     result.success(launchTap)
@@ -165,15 +169,37 @@ class SupabaseRealtimePushPlugin :
         if (RealtimePushService.isIgnoringBatteryOptimizations(context)) return
         val declared = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
             .requestedPermissions?.contains(Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) == true
-        val intent = if (declared) {
-            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
-        } else {
-            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        openSettings(
+            if (declared) {
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
+            } else {
+                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            },
+        )
+    }
+
+    /**
+     * The settings of the "connected" channel alone: turned off there, the notification goes and
+     * the service keeps running. Before Android 8 there are no channels, so the app's page.
+     */
+    private fun openConnectedNotificationSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return openSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
         }
+        // The page of a channel that does not exist yet opens empty.
+        Shade(context).createChannels(Store(context).config)
+        openSettings(
+            Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, Shade.CONNECTION_CHANNEL),
+        )
+    }
+
+    private fun openSettings(intent: Intent) {
         try {
             binding?.activity?.startActivity(intent) ?: context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
-            Log.w(TAG, "no battery optimization screen on this device")
+            Log.w(TAG, "no settings screen for ${intent.action} on this device")
         }
     }
 
