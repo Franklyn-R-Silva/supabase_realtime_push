@@ -14,6 +14,8 @@ internal data class SnapshotNotification(
     val body: String?,
     val silent: Boolean,
     val data: String?,
+    /** Offer a Reply action; the text goes to `realtime_push_reply`. */
+    val reply: Boolean = false,
 )
 
 internal data class Snapshot(val badge: Int?, val notifications: List<SnapshotNotification>)
@@ -54,21 +56,25 @@ private fun parseNotification(json: JSONObject): SnapshotNotification? {
         body = json.opt("body") as? String,
         silent = json.opt("silent") as? Boolean ?: false,
         data = json.optJSONObject("data")?.toString(),
+        reply = json.opt("reply") as? Boolean ?: false,
     )
 }
 
 private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
 
+/** A call to a SQL function as the anon role; the device's pair in [body] is the only credential. */
+internal fun rpcRequest(config: Config, function: String, body: JSONObject): Request = Request.Builder()
+    .url("${config.supabaseUrl.trimEnd('/')}/rest/v1/rpc/$function")
+    // No Authorization header: the new keys are not JWTs, and the gateway applies the anon role without one.
+    .header("apikey", config.publishableKey)
+    .header("Accept", "application/json")
+    .post(body.toString().toRequestBody(JSON_TYPE))
+    .build()
+
 /** Blocking: call it off the main thread. Never put the response body in a log. */
 internal fun fetchSnapshot(client: OkHttpClient, config: Config, credentials: Credentials): SnapshotResult {
-    val body = JSONObject().put("p_topic", credentials.topic).put("p_secret", credentials.secret).toString()
-    val request = Request.Builder()
-        .url("${config.supabaseUrl.trimEnd('/')}/rest/v1/rpc/${config.snapshotFunction}")
-        // No Authorization header: the new keys are not JWTs, and the gateway applies the anon role without one.
-        .header("apikey", config.publishableKey)
-        .header("Accept", "application/json")
-        .post(body.toRequestBody(JSON_TYPE))
-        .build()
+    val body = JSONObject().put("p_topic", credentials.topic).put("p_secret", credentials.secret)
+    val request = rpcRequest(config, config.snapshotFunction, body)
     return try {
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) return SnapshotResult.Failed("HTTP ${response.code}")

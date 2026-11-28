@@ -15,7 +15,7 @@ internal class SnapshotTest {
             {
               "badge": 2,
               "notifications": [
-                {"id": "chat:42", "revision": 1017, "title": "Ana", "body": "See you at 3", "silent": false, "data": {"route": "/chat/42"}}
+                {"id": "chat:42", "revision": 1017, "title": "Ana", "body": "See you at 3", "silent": false, "reply": true, "data": {"route": "/chat/42"}}
               ]
             }
             """,
@@ -28,7 +28,25 @@ internal class SnapshotTest {
         assertEquals("Ana", n.title)
         assertEquals("See you at 3", n.body)
         assertEquals(false, n.silent)
+        assertEquals(true, n.reply)
         assertEquals("/chat/42", JSONObject(n.data!!).getString("route"))
+    }
+
+    @Test
+    fun replyIsOfferedOnlyForATrueBoolean() {
+        val snapshot = parseSnapshot(
+            """
+            {"notifications": [
+              {"id": "yes", "revision": 1, "title": "T", "reply": true},
+              {"id": "missing", "revision": 1, "title": "T"},
+              {"id": "no", "revision": 1, "title": "T", "reply": false},
+              {"id": "text", "revision": 1, "title": "T", "reply": "true"},
+              {"id": "null", "revision": 1, "title": "T", "reply": null}
+            ]}
+            """,
+        )!!
+
+        assertEquals(listOf("yes"), snapshot.notifications.filter { it.reply }.map { it.id })
     }
 
     @Test

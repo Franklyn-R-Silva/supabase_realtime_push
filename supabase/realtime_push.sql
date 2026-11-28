@@ -38,12 +38,16 @@
 --     granted to service_role only, so a trigger running as the signed-in
 --     user would be refused and take the user's write down with it. Running
 --     this file again keeps your version; drop it to get the default back.
+--   - Replies from the notification: add 'reply', true to a notification in
+--     your realtime_push_snapshot_for, and replace realtime_push_reply_for
+--     (it gets the user id, the notification id and the text) the same way.
+--     The id comes from the phone: check that the user may reply there.
 --   - Read rows stay, so an app can show its history. Trim them on a
 --     schedule, for example with pg_cron:
 --       delete from public.realtime_push_notifications
 --        where read_at < now() - interval '30 days';
 --
--- Contract: doc/contract.md, sections 1, 3 and 7.
+-- Contract: doc/contract.md, sections 1, 3, 7 and 9.
 
 -- =============================================================================
 -- Devices
@@ -278,6 +282,65 @@ end;
 $$;
 
 -- =============================================================================
+-- Replies from the notification
+-- =============================================================================
+
+-- What a reply does is yours: insert a chat message, approve a request. The
+-- inbox is one-way and has nobody to deliver a reply to, so its snapshot never
+-- offers the Reply action and the default refuses every reply: a snapshot of
+-- yours that offers it before you replace this shows "Not sent" on the phone,
+-- instead of dropping the text. Created only when missing, so a version you
+-- wrote survives running this file again.
+do $do$
+begin
+  if to_regprocedure('public.realtime_push_reply_for(uuid, text, text)') is null then
+    create function public.realtime_push_reply_for(p_user uuid, p_id text, p_text text)
+    returns void
+    language plpgsql
+    volatile
+    set search_path = ''
+    as $fn$
+    begin
+      raise exception 'realtime_push_reply_for: replace this function to accept replies'
+        using errcode = '0A000';
+    end;
+    $fn$;
+  end if;
+end
+$do$;
+
+-- Called by the device without a session, like the snapshot: true once your
+-- function took the reply, null for a wrong pair without saying which half
+-- was wrong. Any error reaches the phone as "Not sent".
+create or replace function public.realtime_push_reply(p_topic text, p_secret text, p_id text, p_text text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_user uuid;
+begin
+  select d.user_id
+    into v_user
+    from public.realtime_push_devices d
+   where d.topic = p_topic
+     and d.secret_hash = sha256(convert_to(p_secret, 'UTF8'));
+
+  if v_user is null then
+    return null;
+  end if;
+  if p_id is null or p_id = '' or p_text is null or btrim(p_text) = '' then
+    raise exception 'realtime_push_reply: empty id or text' using errcode = '22023';
+  end if;
+
+  perform public.realtime_push_reply_for(v_user, p_id, p_text);
+  return true;
+end;
+$$;
+
+-- =============================================================================
 -- The "changed" signal
 -- =============================================================================
 
@@ -351,6 +414,8 @@ revoke all on function public.realtime_push_send(uuid, text, text, text, jsonb, 
 revoke all on function public.realtime_push_mark_read(text) from public, anon, authenticated;
 revoke all on function public.realtime_push_snapshot_for(uuid) from public, anon, authenticated;
 revoke all on function public.realtime_push_snapshot(text, text) from public, anon, authenticated;
+revoke all on function public.realtime_push_reply_for(uuid, text, text) from public, anon, authenticated;
+revoke all on function public.realtime_push_reply(text, text, text, text) from public, anon, authenticated;
 revoke all on function public.realtime_push_signal(uuid[]) from public, anon, authenticated;
 revoke all on function public.realtime_push_notifications_changed() from public, anon, authenticated;
 
@@ -358,5 +423,6 @@ grant execute on function public.realtime_push_register(text, text, text) to aut
 grant execute on function public.realtime_push_unregister(text) to authenticated;
 grant execute on function public.realtime_push_mark_read(text) to authenticated;
 grant execute on function public.realtime_push_snapshot(text, text) to anon, authenticated;
+grant execute on function public.realtime_push_reply(text, text, text, text) to anon, authenticated;
 grant execute on function public.realtime_push_send(uuid, text, text, text, jsonb, boolean) to service_role;
 grant execute on function public.realtime_push_signal(uuid[]) to service_role;

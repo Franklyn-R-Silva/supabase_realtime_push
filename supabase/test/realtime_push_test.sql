@@ -92,8 +92,8 @@ insert into auth.users (id) values (md5('alice')::uuid), (md5('bob')::uuid), (md
 do $$
 begin
   assert (select count(*) from pg_proc
-           where pronamespace = 'public'::regnamespace and proname like 'realtime\_push\_%') = 8,
-         'eight functions, no duplicates';
+           where pronamespace = 'public'::regnamespace and proname like 'realtime\_push\_%') = 10,
+         'ten functions, no duplicates';
   assert (select count(*) from pg_trigger
            where tgrelid = 'public.realtime_push_notifications'::regclass and not tgisinternal) = 3,
          'three triggers';
@@ -196,9 +196,11 @@ begin
         ('public.realtime_push_unregister(text)', array['authenticated']),
         ('public.realtime_push_mark_read(text)', array['authenticated']),
         ('public.realtime_push_snapshot(text, text)', array['anon', 'authenticated']),
+        ('public.realtime_push_reply(text, text, text, text)', array['anon', 'authenticated']),
         ('public.realtime_push_send(uuid, text, text, text, jsonb, boolean)', array[]::text[]),
         ('public.realtime_push_signal(uuid[])', array[]::text[]),
         ('public.realtime_push_snapshot_for(uuid)', array[]::text[]),
+        ('public.realtime_push_reply_for(uuid, text, text)', array[]::text[]),
         ('public.realtime_push_notifications_changed()', array[]::text[])
       ) as t (fn, allowed),
       unnest(array['anon', 'authenticated']) as who
@@ -228,14 +230,17 @@ begin
   perform test.expect_error($q$select public.realtime_push_send(md5('alice')::uuid, 'k', 't')$q$, '42501');
   perform test.expect_error($q$select public.realtime_push_signal(array[md5('alice')::uuid])$q$, '42501');
   perform test.expect_error($q$select public.realtime_push_snapshot_for(md5('alice')::uuid)$q$, '42501');
+  perform test.expect_error($q$select public.realtime_push_reply_for(md5('alice')::uuid, 'k', 'hi')$q$, '42501');
   perform test.expect_error($q$select * from public.realtime_push_devices$q$, '42501');
   perform test.expect_error($q$select * from public.realtime_push_notifications$q$, '42501');
   perform public.realtime_push_snapshot(test.pad43('x'), test.pad43('y'));
+  perform public.realtime_push_reply(test.pad43('x'), test.pad43('y'), 'k', 'hi');
 
   perform test.act_as('authenticated', md5('alice')::uuid);
   perform test.expect_error($q$select public.realtime_push_send(md5('alice')::uuid, 'k', 't')$q$, '42501');
   perform test.expect_error($q$select public.realtime_push_signal(array[md5('alice')::uuid])$q$, '42501');
   perform test.expect_error($q$select public.realtime_push_snapshot_for(md5('alice')::uuid)$q$, '42501');
+  perform test.expect_error($q$select public.realtime_push_reply_for(md5('alice')::uuid, 'k', 'hi')$q$, '42501');
   perform test.expect_error($q$select * from public.realtime_push_devices$q$, '42501');
   perform test.expect_error(
     $q$insert into public.realtime_push_notifications (user_id, key, title) values (md5('alice')::uuid, 'k', 't')$q$,
@@ -243,6 +248,7 @@ begin
   perform test.expect_error($q$update public.realtime_push_notifications set read_at = now()$q$, '42501');
   perform test.expect_error($q$delete from public.realtime_push_notifications$q$, '42501');
   perform public.realtime_push_snapshot(test.pad43('x'), test.pad43('y'));
+  perform public.realtime_push_reply(test.pad43('x'), test.pad43('y'), 'k', 'hi');
 
   perform test.act_as('service_role');
   perform public.realtime_push_signal(null);
@@ -478,6 +484,48 @@ end
 $$;
 
 -- =============================================================================
+-- Replies
+-- =============================================================================
+
+\echo '== a reply needs the right pair, and the default refuses it'
+do $$
+declare
+  v jsonb;
+begin
+  perform test.act_as('anon');
+  assert public.realtime_push_reply(test.pad43('alice-phone'), test.pad43('alice-secret-1'), 'chat:42', 'hi') is null,
+         'replaced secret';
+  assert public.realtime_push_reply(test.pad43('alice-phone'), test.pad43('bob-secret'), 'chat:42', 'hi') is null,
+         'another device''s secret';
+  assert public.realtime_push_reply(test.pad43('nobody'), test.pad43('alice-secret-2'), 'chat:42', 'hi') is null,
+         'unknown topic';
+  assert public.realtime_push_reply(test.pad43('alice-phone'), null, 'chat:42', 'hi') is null, 'null secret';
+  assert public.realtime_push_reply(test.pad43('nobody'), test.pad43('s'), null, null) is null,
+         'a wrong pair is null before the rest is looked at';
+
+  -- The inbox never offers the Reply action; a reply that comes anyway is refused, not dropped.
+  perform test.expect_error(
+    $q$select public.realtime_push_reply(test.pad43('alice-phone'), test.pad43('alice-secret-2'), 'chat:42', 'hi')$q$,
+    '0A000');
+  perform test.expect_error(
+    $q$select public.realtime_push_reply(test.pad43('alice-phone'), test.pad43('alice-secret-2'), 'chat:42', ' ')$q$,
+    '22023');
+  perform test.expect_error(
+    $q$select public.realtime_push_reply(test.pad43('alice-phone'), test.pad43('alice-secret-2'), 'chat:42', null)$q$,
+    '22023');
+  perform test.expect_error(
+    $q$select public.realtime_push_reply(test.pad43('alice-phone'), test.pad43('alice-secret-2'), '', 'hi')$q$,
+    '22023');
+  perform test.act_as('postgres');
+
+  v := public.realtime_push_snapshot_for(md5('alice')::uuid);
+  assert jsonb_array_length(v -> 'notifications') > 0
+         and not exists (select 1 from jsonb_array_elements(v -> 'notifications') e where e ? 'reply'),
+         format('the inbox snapshot does not offer the Reply action, got %s', v);
+end
+$$;
+
+-- =============================================================================
 -- Device lifetime
 -- =============================================================================
 
@@ -545,13 +593,20 @@ end
 $$;
 
 -- =============================================================================
--- A replaced realtime_push_snapshot_for survives running the script again
+-- Replaced realtime_push_snapshot_for and realtime_push_reply_for survive
+-- running the script again
 -- =============================================================================
 
-\echo '== running the script again keeps a replaced realtime_push_snapshot_for'
+\echo '== running the script again keeps a replaced realtime_push_snapshot_for and realtime_push_reply_for'
 create or replace function public.realtime_push_snapshot_for(p_user uuid)
 returns jsonb language sql stable as $$
   select '{"badge": 7, "notifications": []}'::jsonb
+$$;
+
+create table test.replies (user_id uuid, id text, text text);
+create or replace function public.realtime_push_reply_for(p_user uuid, p_id text, p_text text)
+returns void language sql as $$
+  insert into test.replies values (p_user, p_id, p_text)
 $$;
 
 \ir ../realtime_push.sql
@@ -561,9 +616,19 @@ begin
   perform test.act_as('anon');
   assert public.realtime_push_snapshot(test.pad43('alice-phone'), test.pad43('alice-secret-2'))
          = '{"badge": 7, "notifications": []}'::jsonb, 'the replacement is kept';
+  assert public.realtime_push_reply(test.pad43('alice-phone'), test.pad43('alice-secret-2'), 'chat:42', 'See you')
+         is true, 'the replaced reply handler is kept and answers true';
+  assert public.realtime_push_reply(test.pad43('alice-phone'), test.pad43('wrong'), 'chat:42', 'nope') is null,
+         'a wrong pair still reaches nothing';
   perform test.act_as('authenticated', md5('alice')::uuid);
   perform test.expect_error($q$select public.realtime_push_snapshot_for(md5('alice')::uuid)$q$, '42501');
+  perform test.expect_error($q$select public.realtime_push_reply_for(md5('alice')::uuid, 'k', 'hi')$q$, '42501');
   perform test.act_as('postgres');
+
+  assert (select count(*) from test.replies) = 1, 'one reply handed over';
+  assert exists (select 1 from test.replies
+                  where user_id = md5('alice')::uuid and id = 'chat:42' and text = 'See you'),
+         'with the device''s user, the notification id and the text';
 end
 $$;
 

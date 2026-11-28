@@ -92,6 +92,7 @@ Response:
       "title": "Ana",
       "body": "See you at 3",
       "silent": false,
+      "reply": true,
       "data": {"route": "/chat/42"}
     }
   ]
@@ -106,6 +107,7 @@ Response:
 | `notifications[].title` | string, required | |
 | `notifications[].body` | string, optional | |
 | `notifications[].silent` | bool, optional (false) | Show without sound or vibration |
+| `notifications[].reply` | bool, optional (false) | Offer a Reply action in the shade (section 9) |
 | `notifications[].data` | object, optional | Handed back to Dart when the user taps |
 
 Unknown fields are ignored, so the server can add fields without breaking old
@@ -137,7 +139,7 @@ For each fetched snapshot, in order:
 3. Alerted revisions are pruned to the ids in the snapshot; a dismissed
    revision is kept only while it still hides something (`revision <= r`).
 
-Only what is new, changed (revision, title, body, silent, data or badge) or
+Only what is new, changed (revision, title, body, silent, reply, data or badge) or
 missing from the shade is posted; the rest is left alone. Android drops
 notification updates past 5 per second per app, so reposting everything on
 every snapshot loses changes; for the same reason posts go out at least 250 ms
@@ -209,6 +211,8 @@ a notification while the app is running.
 | `realtime_push_unregister(p_topic)` | the app, signed in | Deletes the caller's own device |
 | `realtime_push_snapshot(p_topic, p_secret)` | the service, `anon` (also `authenticated`) | Checks the pair, stamps `seen_at` (at most once a minute), returns `realtime_push_snapshot_for(user)` (an empty snapshot when that is `null`), or `null` for an unknown pair |
 | `realtime_push_snapshot_for(p_user)` | the snapshot function only | **Yours to replace** with `create or replace`; running the script again keeps your version. It runs inside `realtime_push_snapshot`, whose `search_path` is empty: give yours its own `set search_path`, or schema-qualify every name. The default reads `realtime_push_notifications` |
+| `realtime_push_reply(p_topic, p_secret, p_id, p_text)` | the service, `anon` (also `authenticated`) | Checks the pair, hands the reply to `realtime_push_reply_for(user, p_id, p_text)` and returns `true`, or `null` for a wrong pair. With the right pair, an empty `p_id` or a blank or null `p_text` is error `22023` |
+| `realtime_push_reply_for(p_user, p_id, p_text)` | the reply function only | **Yours to replace**, under the same rules as `realtime_push_snapshot_for`. The default refuses every reply (error `0A000`): the inbox is one-way and never offers the Reply action, and a snapshot of yours that offers it before you replace this shows "Not sent" instead of losing the text |
 | `realtime_push_signal(p_users uuid[])` | your triggers, `service_role` | `realtime.send('{}', 'changed', 'push:' \|\| topic, false)` to every device of those users seen in the last 60 days (a device that comes back reads the snapshot when it joins). Errors become warnings: a push must never fail the write that caused it |
 | `realtime_push_notifications` | the user reads own rows (RLS); writes go through the two functions below | A ready-made inbox. Any insert, update or delete signals the owners, once per statement |
 | `realtime_push_send(p_user, p_key, p_title, p_body default '', p_data default '{}', p_silent default false)` | your backend, `service_role` | Inserts an inbox row and returns its id. Same `p_key` = same notification |
@@ -216,7 +220,7 @@ a notification while the app is running.
 
 The default snapshot has one notification per `key`: its newest unread row,
 with `revision` = that row's id. Newest first, at most 20; `badge` counts every
-unread row.
+unread row. It never sets `reply`.
 
 `secret_hash` is `sha256()` of the secret's UTF-8 bytes, built into Postgres
 11 and later, so no extension is needed.
@@ -237,3 +241,43 @@ device silently stops getting notifications.
   signal to many users at once, such as an announcement to the whole fleet,
   goes past it, and Realtime then drops broadcasts for a while. Raise it before
   fleet-wide sends, or spread them out.
+
+## 9. Replying from the notification
+
+A notification with `"reply": true` gets a Reply action with a text field
+(Android `RemoteInput`), as in chat apps; the app is not opened. On Android 12+
+the action asks to unlock a locked phone first: whoever holds it must not reply
+as its owner.
+
+What the user types is sent at once, off the main thread:
+
+`POST <supabaseUrl>/rest/v1/rpc/realtime_push_reply`, header
+`apikey: <publishableKey>`, body
+`{"p_topic": "...", "p_secret": "...", "p_id": "<the notification's id>", "p_text": "..."}`.
+
+The same rules as the snapshot apply: the device's pair is the only
+credential, never the user's session, and the key goes in `apikey` only. The
+function name is fixed; what a reply does is up to `realtime_push_reply_for`
+(section 7).
+
+- **Sent**: the server answered `true`. The notification is removed and counts
+  as dismissed at its shown revision, like a tap: the user has read it, and
+  the next snapshot would otherwise put it back. It comes back when its
+  revision grows, so a reply handler that bumps the revision without clearing
+  the notification makes the user's own reply alert.
+- **Not sent**: anything else, an HTTP error, a timeout (10 s), or `null`
+  (the pair is not registered). The notification is posted again, alerting,
+  with "Not sent" in its header, the typed text under it
+  (`setRemoteInputHistory`) and the Reply action, so the user can try again.
+  This stays until the snapshot changes or removes that notification. Android
+  cannot put the text back in the field. Nothing is retried on its
+  own. A timeout can come after the server took the reply, so retrying can
+  send it twice.
+- After `stop` (or a `rejected` status), a reply still in flight posts
+  nothing: the shade was cleared for a reason.
+
+"Reply" and "Not sent" are the Android string resources
+`supabase_realtime_push_reply` and `supabase_realtime_push_reply_failed`. The
+app translates them by defining the same names in its own
+`res/values-<language>/strings.xml`; they follow the phone's language, also
+with the app closed.

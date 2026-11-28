@@ -14,3 +14,7 @@
 - Android service that keeps the Realtime connection and shows the snapshot as notifications.
 - Needs Flutter 3.44 or later: the Android build relies on Flutter applying
   the Kotlin plugin to apps without AGP 9's built-in Kotlin.
+- Reply from the notification: a snapshot entry with `"reply": true` gets a
+  Reply action, the text goes to the new `realtime_push_reply`, which hands it
+  to your `realtime_push_reply_for`, and a reply that fails says "Not sent" on
+  the notification and keeps the text.

@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.PendingIntentCompat
+import androidx.core.app.RemoteInput
 
 /** The package's notifications in the system shade: the snapshot ones and the "connected" one. */
 internal class Shade(private val context: Context) {
@@ -24,10 +26,16 @@ internal class Shade(private val context: Context) {
 
         const val ACTION_TAP = "dev.devfrs.supabase_realtime_push.TAP"
         const val ACTION_DISMISS = "dev.devfrs.supabase_realtime_push.DISMISS"
+        const val ACTION_REPLY = "dev.devfrs.supabase_realtime_push.REPLY"
         const val EXTRA_ID = "dev.devfrs.supabase_realtime_push.ID"
         const val EXTRA_REVISION = "dev.devfrs.supabase_realtime_push.REVISION"
         const val EXTRA_DATA = "dev.devfrs.supabase_realtime_push.DATA"
         const val EXTRA_KEY = "dev.devfrs.supabase_realtime_push.KEY"
+        const val EXTRA_TITLE = "dev.devfrs.supabase_realtime_push.TITLE"
+        const val EXTRA_BODY = "dev.devfrs.supabase_realtime_push.BODY"
+
+        /** The RemoteInput result key: what the user typed. */
+        const val KEY_REPLY_TEXT = "dev.devfrs.supabase_realtime_push.REPLY_TEXT"
 
         /**
          * One owner of the shade at a time: the snapshot thread posts while a swipe or a tap
@@ -96,6 +104,18 @@ internal class Shade(private val context: Context) {
         manager.cancel(id, NOTIFICATION_ID)
     }
 
+    /**
+     * The reply typed under [n] did not reach the server. Posted again, alerting, with "Not sent"
+     * in the header, the text under it and the Reply action to try again. Posted even if a
+     * snapshot removed [n] meanwhile: the next snapshot takes it away, the text is not lost silently.
+     */
+    fun replyFailed(n: SnapshotNotification, text: CharSequence, config: Config): Unit = synchronized(LOCK) {
+        // After stop(), nothing of the previous user's goes back in the shade.
+        if (store.status != Store.RUNNING) return
+        // shortcut: the repost drops the launcher badge number until the snapshot changes; carry it in the intent if that matters.
+        notify(Post(n, alert = true, badge = null), config, System.currentTimeMillis(), unsent = text)
+    }
+
     fun clear() = synchronized(LOCK) {
         for (id in shown()) manager.cancel(id, NOTIFICATION_ID)
     }
@@ -103,7 +123,7 @@ internal class Shade(private val context: Context) {
     private fun shown(): Set<String> =
         manager.activeNotifications.filter { it.id == NOTIFICATION_ID && it.tag != null }.map { it.tag }.toSet()
 
-    private fun notify(post: Post, config: Config, `when`: Long) {
+    private fun notify(post: Post, config: Config, `when`: Long, unsent: CharSequence? = null) {
         val n = post.notification
         val builder = NotificationCompat.Builder(context, MESSAGES_CHANNEL)
             .setSmallIcon(smallIcon(config))
@@ -123,7 +143,11 @@ internal class Shade(private val context: Context) {
         // Before Android 8 the notification, not the channel, carries sound and vibration.
         if (post.alert) builder.setDefaults(NotificationCompat.DEFAULT_ALL)
         post.badge?.let { builder.setNumber(it) }
-        // Only the snapshot thread posts, so the wait never blocks the main thread.
+        if (n.reply) builder.addAction(replyAction(n))
+        if (unsent != null) {
+            builder.setSubText(context.getString(R.string.supabase_realtime_push_reply_failed)).setRemoteInputHistory(arrayOf(unsent))
+        }
+        // Only background threads post (the snapshot's and a reply's), so the wait never blocks the main thread.
         val wait = lastPostAt + POST_GAP_MS - SystemClock.elapsedRealtime()
         if (wait > 0) Thread.sleep(wait)
         try {
@@ -170,6 +194,26 @@ internal class Shade(private val context: Context) {
             .putExtra(EXTRA_REVISION, n.revision),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
+
+    /** Carries what [replyFailed] needs to post [n] again, in case a snapshot removed it meanwhile. */
+    private fun replyAction(n: SnapshotNotification): NotificationCompat.Action {
+        val label = context.getString(R.string.supabase_realtime_push_reply)
+        val intent = Intent(context, ReplyReceiver::class.java)
+            .setAction(ACTION_REPLY)
+            .setData(Uri.fromParts("supabase-realtime-push", n.id, null))
+            .putExtra(EXTRA_ID, n.id)
+            .putExtra(EXTRA_REVISION, n.revision)
+            .putExtra(EXTRA_TITLE, n.title)
+            .putExtra(EXTRA_BODY, n.body)
+            .putExtra(EXTRA_DATA, n.data)
+        // Mutable, or the system cannot add the typed text; the explicit component keeps that safe.
+        val reply = PendingIntentCompat.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT, true)
+        return NotificationCompat.Action.Builder(0, label, reply)
+            .addRemoteInput(RemoteInput.Builder(KEY_REPLY_TEXT).setLabel(label).build())
+            // Someone holding the locked phone must not reply as its owner.
+            .setAuthenticationRequired(true)
+            .build()
+    }
 
     private fun smallIcon(config: Config?): Int {
         val name = config?.smallIcon ?: return context.applicationInfo.icon
