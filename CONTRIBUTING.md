@@ -50,6 +50,26 @@ the example app, against a real project, before tagging:
 | `realtime_push_unregister` from SQL: the shade clears, status `rejected` | | | | |
 | Sign out: the shade clears, status `stopped` | | | | |
 
+## Releasing
+
+1. In one PR, titled `chore: release x.y.z`, set `version:` in `pubspec.yaml`,
+   date the top `CHANGELOG.md` section (`## x.y.z - YYYY-MM-DD`) and update the
+   README's `supabase_realtime_push: ^x.y.z`. `flutter pub publish --dry-run`
+   must report 0 warnings.
+2. Merge it, then tag the merge commit and push the tag:
+
+   ```sh
+   git tag -a vx.y.z -m "x.y.z" <merge sha>
+   git push origin vx.y.z
+   ```
+
+3. The tag runs [`release.yaml`](.github/workflows/release.yaml): analyze and
+   tests, a check that the tag matches `pubspec.yaml`, the upload to pub.dev,
+   then the GitHub Release with the CHANGELOG section. pub.dev only accepts the
+   upload from this repository, for a `v{{version}}` tag, from the `pub.dev`
+   environment, which only `v*` tags can use. Its OIDC token lives for the
+   run, so no publish secret is stored.
+
 ## Commits and PR titles
 
 [Conventional Commits](https://www.conventionalcommits.org/): `feat: …`,
