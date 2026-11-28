@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.1 - Unreleased
+## 0.0.1 - 2026-11-28
 
 - Project scaffold and the Dart ↔ Android ↔ database contract.
 - CI scans every PR for leaked secrets (gitleaks) and grades the repository
