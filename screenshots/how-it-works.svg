@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="712" viewBox="0 0 1040 712">
+  <title>How it works: the database rings an empty doorbell over Realtime, the phone fetches the snapshot and makes its shade match it</title>
+  <defs>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#1A2743"/>
+    </pattern>
+    <marker id="head-violet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#A78BFA"/>
+    </marker>
+    <marker id="head-emerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#34D399"/>
+    </marker>
+    <marker id="head-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#FBBF24"/>
+    </marker>
+    <marker id="head-sky" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#7DD3FC"/>
+    </marker>
+  </defs>
+
+  <rect width="1040" height="712" fill="#0E172B"/>
+  <rect width="1040" height="712" fill="url(#dots)"/>
+
+  <!-- Lanes -->
+  <g fill="#15223D" stroke-width="1.5">
+    <rect x="50" y="28" width="260" height="76" rx="14" stroke="#60A5FA"/>
+    <rect x="390" y="28" width="260" height="76" rx="14" stroke="#34D399"/>
+    <rect x="730" y="28" width="260" height="76" rx="14" stroke="#A78BFA"/>
+  </g>
+  <g font-family="'Red Hat Display', 'Noto Sans', sans-serif" font-size="20" font-weight="700" fill="#F8FAFC" text-anchor="middle">
+    <text x="180" y="62">Postgres</text>
+    <text x="520" y="62">Realtime</text>
+    <text x="860" y="62">Android phone</text>
+  </g>
+  <g font-family="'Red Hat Text', 'Noto Sans', sans-serif" font-size="14" fill="#94A3B8" text-anchor="middle">
+    <text x="180" y="87">your tables and functions</text>
+    <text x="520" y="87">Supabase, cloud or self-hosted</text>
+    <text x="860" y="87">native service, no Flutter engine</text>
+  </g>
+  <g stroke="#2E4066" stroke-width="2" stroke-dasharray="4 7">
+    <path d="M180 104 V540"/>
+    <path d="M520 104 V540"/>
+    <path d="M860 104 V540"/>
+  </g>
+
+  <!-- Step numbers -->
+  <g font-family="'Red Hat Display', sans-serif" font-size="15" font-weight="700" text-anchor="middle">
+    <circle cx="24" cy="158" r="13" fill="#A78BFA"/>
+    <text x="24" y="163" fill="#0E172B">1</text>
+    <circle cx="24" cy="240" r="13" fill="#34D399"/>
+    <text x="24" y="245" fill="#0E172B">2</text>
+    <circle cx="24" cy="322" r="13" fill="#FBBF24"/>
+    <text x="24" y="327" fill="#0E172B">3</text>
+    <circle cx="24" cy="410" r="13" fill="#7DD3FC"/>
+    <text x="24" y="415" fill="#0E172B">4</text>
+  </g>
+
+  <!-- 1. Register -->
+  <path d="M856 158 H190" stroke="#A78BFA" stroke-width="2.5" marker-end="url(#head-violet)"/>
+  <rect x="340" y="128" width="360" height="22" fill="#0E172B"/>
+  <text x="520" y="145" text-anchor="middle" font-family="'Red Hat Mono', monospace" font-size="15" font-weight="600" fill="#DDD6FE">realtime_push_register(topic, secret)</text>
+  <rect x="300" y="168" width="440" height="22" fill="#0E172B"/>
+  <text x="520" y="184" text-anchor="middle" font-family="'Red Hat Text', sans-serif" font-size="14" fill="#94A3B8">once, after sign-in · the database keeps only the secret's hash</text>
+
+  <!-- 2. One WebSocket -->
+  <path d="M530 240 H850" stroke="#34D399" stroke-width="4" marker-start="url(#head-emerald)" marker-end="url(#head-emerald)"/>
+  <text x="690" y="228" text-anchor="middle" font-family="'Red Hat Text', sans-serif" font-size="15" font-weight="700" fill="#6EE7B7">one WebSocket, all day</text>
+  <text x="690" y="265" text-anchor="middle" font-family="'Red Hat Mono', monospace" font-size="14" fill="#94A3B8">joined to realtime:push:&lt;topic&gt;</text>
+
+  <!-- 3. The doorbell -->
+  <path d="M184 322 H500" stroke="#FBBF24" stroke-width="3" stroke-dasharray="2 8" stroke-linecap="round"/>
+  <path d="M540 322 H852" stroke="#FBBF24" stroke-width="3" stroke-dasharray="2 8" stroke-linecap="round" marker-end="url(#head-amber)"/>
+  <text x="340" y="308" text-anchor="middle" font-family="'Red Hat Mono', monospace" font-size="15" font-weight="600" fill="#FCD34D">realtime_push_signal()</text>
+  <text x="696" y="308" text-anchor="middle" font-family="'Red Hat Mono', monospace" font-size="15" font-weight="600" fill="#FCD34D">"changed", payload { }</text>
+  <g>
+    <circle cx="520" cy="322" r="17" fill="#2A2412" stroke="#FBBF24" stroke-width="2"/>
+    <path d="M511 330 C 512.5 327, 512.5 323, 512.5 319.5 C 512.5 314, 515.5 310.5, 520 310.5 C 524.5 310.5, 527.5 314, 527.5 319.5 C 527.5 323, 527.5 327, 529 330 Z" fill="#FBBF24"/>
+    <rect x="509" y="329" width="22" height="3.5" rx="1.75" fill="#FBBF24"/>
+    <circle cx="520" cy="335.5" r="2.6" fill="#FBBF24"/>
+  </g>
+  <rect x="320" y="344" width="400" height="22" fill="#0E172B"/>
+  <text x="520" y="360" text-anchor="middle" font-family="'Red Hat Text', sans-serif" font-size="14" fill="#94A3B8">a doorbell: no content ever travels over the socket</text>
+
+  <!-- 4. Snapshot -->
+  <path d="M856 410 H190" stroke="#7DD3FC" stroke-width="2.5" marker-end="url(#head-sky)"/>
+  <rect x="300" y="380" width="440" height="22" fill="#0E172B"/>
+  <text x="520" y="397" text-anchor="middle" font-family="'Red Hat Mono', monospace" font-size="15" font-weight="600" fill="#BAE6FD">POST rpc/realtime_push_snapshot(topic, secret)</text>
+  <path d="M184 470 H850" stroke="#7DD3FC" stroke-width="2.5" stroke-dasharray="8 6" marker-end="url(#head-sky)"/>
+  <rect x="340" y="440" width="360" height="22" fill="#0E172B"/>
+  <text x="520" y="457" text-anchor="middle" font-family="'Red Hat Mono', monospace" font-size="15" font-weight="600" fill="#BAE6FD">snapshot { badge, notifications }</text>
+  <rect x="320" y="480" width="400" height="22" fill="#0E172B"/>
+  <text x="520" y="496" text-anchor="middle" font-family="'Red Hat Text', sans-serif" font-size="14" fill="#94A3B8">every notification the device should show right now</text>
+
+  <!-- If the connection drops -->
+  <rect x="50" y="552" width="340" height="140" rx="14" fill="#15223D" stroke="#2B3D60" stroke-width="1.5"/>
+  <text x="74" y="584" font-family="'Red Hat Display', sans-serif" font-size="17" font-weight="700" fill="#F8FAFC">If the connection drops</text>
+  <text font-family="'Red Hat Text', sans-serif" font-size="15" fill="#94A3B8">
+    <tspan x="74" y="614">After every reconnect the phone</tspan>
+    <tspan x="74" y="636">fetches the snapshot again: nothing</tspan>
+    <tspan x="74" y="658">is lost, and a message read on</tspan>
+    <tspan x="74" y="680">another phone disappears here too.</tspan>
+  </text>
+
+  <!-- The shade matches the snapshot -->
+  <path d="M860 540 V552" stroke="#A78BFA" stroke-width="2"/>
+  <rect x="420" y="552" width="570" height="140" rx="14" fill="#15223D" stroke="#A78BFA" stroke-width="1.5"/>
+  <text x="444" y="584" font-family="'Red Hat Display', sans-serif" font-size="17" font-weight="700" fill="#F8FAFC">The notification shade now matches the snapshot</text>
+  <g font-family="'Red Hat Text', sans-serif">
+    <rect x="444" y="604" width="166" height="64" rx="12" fill="#1A2742" stroke="#34D399" stroke-width="2"/>
+    <circle cx="468" cy="636" r="9" fill="#34D399"/>
+    <text x="486" y="630" font-size="16" font-weight="700" fill="#F8FAFC">New</text>
+    <text x="486" y="651" font-size="14" fill="#94A3B8">alerts</text>
+
+    <rect x="622" y="604" width="166" height="64" rx="12" fill="#1A2742" stroke="#818CF8" stroke-width="1.5"/>
+    <circle cx="646" cy="636" r="9" fill="#818CF8"/>
+    <text x="664" y="630" font-size="16" font-weight="700" fill="#F8FAFC">Changed</text>
+    <text x="664" y="651" font-size="14" fill="#94A3B8">updates quietly</text>
+
+    <rect x="800" y="604" width="166" height="64" rx="12" fill="none" stroke="#53627C" stroke-width="1.5" stroke-dasharray="5 5"/>
+    <circle cx="824" cy="636" r="9" fill="none" stroke="#64748B" stroke-width="1.5"/>
+    <text x="842" y="630" font-size="16" font-weight="700" fill="#94A3B8">Gone</text>
+    <text x="842" y="651" font-size="14" fill="#64748B">disappears</text>
+  </g>
+</svg>

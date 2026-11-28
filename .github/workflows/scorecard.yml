@@ -1,11 +1,11 @@
 # OpenSSF Scorecard grades how the repository is run (branch rules, token
-# permissions, pinned actions, dangerous workflow patterns, maintenance).
+# permissions, pinned actions, dangerous workflow patterns, maintenance) and
+# files every gap as an alert under Security > Code scanning. It is what keeps
+# the hardening in these workflows from quietly regressing.
 #
-# Private-repository version: Scorecard's API only publishes public results,
-# and uploading SARIF to code scanning needs GitHub Advanced Security here, so
-# the score goes to the job summary instead. Going public (#7) switches this to
-# the same workflow as the other packages: publish_results, the SARIF upload
-# and the badge.
+# Scorecard's API only accepts published results from workflows that follow
+# its rules: no workflow-level write permissions, env or defaults, and only
+# approved actions in the job below. Keep it that way, or publishing fails.
 # https://github.com/ossf/scorecard-action#workflow-restrictions
 name: scorecard
 
@@ -17,7 +17,6 @@ on:
     - cron: '23 6 * * 1'
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions: {}
 
@@ -35,14 +34,9 @@ jobs:
     timeout-minutes: 15
     # Scorecard only supports the default branch.
     if: github.event.repository.default_branch == github.ref_name
-    # Read-only, and on a private repository the token needs each of these to
-    # see the PRs, checks and issues the checks grade.
     permissions:
-      contents: read
-      actions: read
-      checks: read
-      issues: read
-      pull-requests: read
+      security-events: write # upload the SARIF to code scanning
+      id-token: write # sign the results published to api.scorecard.dev
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,15 +44,13 @@ jobs:
 
       - uses: ossf/scorecard-action@23f22cd43608bae7a1f1fa2603d7314dee9538a5 # v2.6.0
         with:
-          results_file: results.json
-          results_format: json
-          publish_results: false
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+          # A rejected publish is otherwise only a warning nobody reads.
+          fail_on_publish_error: true
 
-      - name: Write the score to the job summary
-        if: always()
-        run: |
-          jq -r '
-            "## OpenSSF Scorecard: \(.score) / 10", "",
-            "| Check | Score | Reason |", "|---|---|---|",
-            (.checks | sort_by(.score) | .[] | "| \(.name) | \(.score) | \(.reason | gsub("\\|"; "/")) |")
-          ' results.json >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: results.sarif

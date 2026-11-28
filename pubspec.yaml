@@ -8,6 +8,11 @@ issue_tracker: https://github.com/Franklyn-R-Silva/supabase_realtime_push/issues
 # Private until the first release: this stops an accidental `pub publish`.
 # Remove it in the go-public checklist, together with the CI publish dry-run.
 publish_to: none
+screenshots:
+  - description: >-
+      Your database rings an empty doorbell over Supabase Realtime, and the
+      phone fetches the snapshot that its notification shade then matches.
+    path: screenshots/hero.png
 topics:
   - supabase
   - push-notifications
