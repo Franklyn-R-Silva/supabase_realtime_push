@@ -232,9 +232,10 @@ unread row. It never sets `reply`.
 
 ## 8. Self-hosted Realtime
 
-Every device holds one connection while its screen is on (§5: with the screen
-off the socket drops and the service waits for the screen to reconnect), and
-an open app's own Supabase client holds another. Realtime refuses new connections past the tenant's
+Every device holds one connection while its screen is on, or while another app
+keeps its processor awake (§5: once the processor sleeps the socket drops and
+the service waits for the screen to reconnect), and an open app's own Supabase
+client holds another. Realtime refuses new connections past the tenant's
 `max_concurrent_users` with `429 Too many connected users`, and the refused
 device silently stops getting notifications.
 

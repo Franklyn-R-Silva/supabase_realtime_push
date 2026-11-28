@@ -141,10 +141,12 @@ It is idempotent and creates, in `public`:
 #### Self-hosted Supabase: raise the Realtime connection limit first
 
 Every device keeps one Realtime connection open while its screen is on (with
-the screen off it drops within a minute, and the service reconnects when the
-screen turns on), and an open app's own Supabase client holds another. So the
-peak is the phones in use at the same time, not every phone: size the limit
-for your busiest hour, with room to spare. Self-hosted Realtime accepts **200** concurrent
+the screen off the processor sleeps and the connection drops within a minute;
+the service reconnects when the screen turns on), and an open app's own
+Supabase client holds another. So the peak is the phones whose screen is on,
+or whose processor another app keeps awake (music, navigation), at the same
+time, not every phone: size the limit for your busiest hour, with room to
+spare. Self-hosted Realtime accepts **200** concurrent
 connections per tenant by default and refuses the rest with `429 Too many
 connected users`. Refused phones silently stop getting notifications.
 
