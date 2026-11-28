@@ -1,4 +1,43 @@
-# supabase_realtime_push
+<h1 align="center">
+  <img
+    src="https://raw.githubusercontent.com/Franklyn-R-Silva/supabase_realtime_push/main/screenshots/hero.png"
+    alt="supabase_realtime_push: your database rings an empty doorbell, and the phone fetches the snapshot of its notifications"
+    width="860"
+  />
+</h1>
+
+<p align="center">
+  <a href="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/ci.yaml"><img src="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/ci.yaml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Franklyn-R-Silva/supabase_realtime_push"><img src="https://api.scorecard.dev/projects/github.com/Franklyn-R-Silva/supabase_realtime_push/badge" alt="OpenSSF Scorecard" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+  <img src="https://img.shields.io/badge/platform-Android%207.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Platform: Android 7.0+" />
+  <a href="https://supabase.com/docs/guides/realtime"><img src="https://img.shields.io/badge/Supabase-Realtime-3FCF8E?logo=supabase&amp;logoColor=white" alt="Supabase Realtime" /></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A5%203.32-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32 or later" /></a>
+</p>
+
+<p align="center">
+  <strong>Push notifications on Android without Firebase.</strong><br />
+  One Supabase Realtime connection, an empty signal, and a notification shade
+  that always matches your database.
+</p>
+
+<p align="center">
+  <a href="#setup"><img
+    src="https://img.shields.io/badge/Get_started-10B981?style=for-the-badge&amp;logo=supabase&amp;logoColor=white"
+    alt="Get started"
+  /></a>
+  <br />
+  Works with Supabase Cloud and with self-hosted Supabase.<br />
+  No FCM project and no <code>google-services.json</code>.
+</p>
+
+> **Status: work in progress, not published yet.** The design is in
+> [docs/contract.md](docs/contract.md).
+
+---
+
+## What it does
 
 A push notification is the message that pops up on a phone, like "Your order
 has shipped", even when the app is closed. On Android, apps almost always get
@@ -17,6 +56,8 @@ connection drops, in an elevator or on weak Wi-Fi, the phone asks again once
 it is back, so nothing is lost. A message read on another phone disappears
 from this one.
 
+## Who it is for
+
 It is for company phones without Google, fleets that install the app from a
 file instead of the Play Store, and teams that run their own Supabase server.
 It is not for iPhones, which do not let an app keep a connection open in the
@@ -26,13 +67,32 @@ real: each phone holds a connection to your server all day, and unless the
 user lets the app skip battery saving, Android shows a small "connected"
 notification that stays.
 
-> **Status: work in progress, not published yet.** The design is in
-> [docs/contract.md](docs/contract.md).
+## Contents
 
-Works with Supabase Cloud and with self-hosted Supabase. No FCM project and no
-`google-services.json`.
+- [How it works](#how-it-works)
+- [Platform support](#platform-support)
+- [Setup](#setup): [database](#1-database) ·
+  [Flutter](#2-flutter) ·
+  [register and start](#3-register-and-start-after-sign-in) ·
+  [sign out](#4-sign-out) · [send](#5-send-a-notification) ·
+  [taps](#6-handle-taps)
+- [Your own data instead of the inbox](#your-own-data-instead-of-the-inbox)
+- [Battery and the "connected" notification](#battery-and-the-connected-notification)
+- [Security](#security)
+- [Limits](#limits)
+- [Feedback and contributing](#feedback-and-contributing)
+
+---
 
 ## How it works
+
+<p align="center">
+  <img
+    src="https://raw.githubusercontent.com/Franklyn-R-Silva/supabase_realtime_push/main/screenshots/how-it-works.png"
+    alt="Sequence diagram. 1: the phone registers a topic and secret with Postgres. 2: it keeps one WebSocket to Realtime. 3: Postgres sends an empty changed signal through Realtime to the phone. 4: the phone fetches the snapshot from Postgres, and its notification shade then matches it: new ones alert, changed ones update quietly, gone ones disappear."
+    width="860"
+  />
+</p>
 
 1. The app registers the device with your project: a random topic and secret,
    one pair per device. The database keeps only the secret's hash.
@@ -53,6 +113,8 @@ Works with Supabase Cloud and with self-hosted Supabase. No FCM project and no
 
 On other platforms every call is a no-op, except `device()`, which throws, so
 you can keep one code path and check `SupabaseRealtimePush.isSupported`.
+
+---
 
 ## Setup
 
@@ -301,6 +363,8 @@ Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 - The topic must be public: projects that disabled public Realtime channels
   cannot use this package.
 
+---
+
 ## Feedback and contributing
 
 - Bugs and ideas: [open an issue](https://github.com/Franklyn-R-Silva/supabase_realtime_push/issues).
@@ -309,4 +373,4 @@ Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
