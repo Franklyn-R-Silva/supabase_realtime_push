@@ -27,8 +27,11 @@ one, and the database needs no queue.
 | `topic` | 32 random bytes, base64url without padding (43 chars, `^[A-Za-z0-9_-]{43}$`) | device (plain) and database (plain, primary key) |
 | `secret` | 32 random bytes, base64url without padding (43 chars) | device (plain) and database (**sha256 only**) |
 
-- Generated on the device with `SecureRandom`, once, and kept in the app's
-  private `SharedPreferences` until `stop(forgetDevice: true)`.
+- Generated on the device with `SecureRandom`, once, and kept in a private
+  file under `noBackupFilesDir` until `stop(forgetDevice: true)`. Auto Backup
+  and device-to-device transfer copy `SharedPreferences`; a new phone restored
+  from a backup must register its own pair, not read the old phone's
+  notifications.
 - The topic is the Realtime channel name, so anyone who learns it can only
   learn *that something changed*. Content needs the secret.
 - Why not the user's session: the service runs with the app closed. Sharing
@@ -122,14 +125,27 @@ For each fetched snapshot, in order:
 1. Every notification this package posted whose `id` is not in the snapshot is
    cancelled.
 2. For each listed notification:
-   - if the user swiped it away at revision `r` and `revision <= r`: skip it;
+   - if the user swiped it away at revision `r` and `revision <= r`: skip it
+     (and cancel it if it is still shown);
    - else post it (Android tag = `id`), alerting only if `revision` is greater
      than the last revision alerted for that `id` and `silent` is false;
-     otherwise update it silently (`setOnlyAlertOnce`).
-3. Alerted and dismissed revisions are pruned to the ids in the snapshot.
+     otherwise update it silently (`setOnlyAlertOnce`). Every listed `id`
+     remembers its revision as alerted, silent or not, so a repost after a
+     reboot or a later `silent: false` does not ring for the same revision.
+3. Alerted revisions are pruned to the ids in the snapshot; a dismissed
+   revision is kept only while it still hides something (`revision <= r`).
+
+Only what is new, changed (revision, title, body, silent, data or badge) or
+missing from the shade is posted; the rest is left alone. Android drops
+notification updates past 5 per second per app, so reposting everything on
+every snapshot loses changes. What is posted together keeps the snapshot's
+order, first on top. Only the first shown notification carries `badge`:
+launchers that show a number add them up.
 
 Tapping a notification opens the app's launch activity and hands
-`{id, data}` to Dart.
+`{id, data}` to Dart. A tap counts as a dismissal at the shown revision:
+Android removes a tapped notification without telling the app, and the next
+snapshot would otherwise put it back.
 
 ## 5. The Android service
 
@@ -145,7 +161,18 @@ Tapping a notification opens the app's launch activity and hands
 - The choice is re-made on every start command, so granting the exemption later
   removes the "connected" notification.
 - `START_STICKY`, restarted after reboot and app update, and checked by a
-  periodic watchdog.
+  periodic watchdog (an inexact alarm allowed while idle, about every 5 min).
+- Not exempt, on Android 12+: when the system kills the process, neither the
+  `START_STICKY` restart nor the watchdog may start a foreground service from
+  the background, so the service stays down (and stops itself if it was
+  restarted without the foreground) until the app is opened. Every app launch
+  starts it again while the status is `running`, which means "turned on", not
+  "connected right now".
+- With the screen off a dropped socket is not reconnected: the CPU sleeps, the
+  heartbeat stalls and the server closes the socket within a minute, so
+  reconnecting would cost a handshake, a join and a snapshot every minute all
+  night. The watchdog reads the snapshot instead, and turning the screen on
+  reconnects.
 
 ## 6. Dart ↔ Android
 

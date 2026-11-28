@@ -11,3 +11,4 @@
   in, registers the device and starts the service.
 - `supabase/realtime_push.sql`: device registration, the snapshot, the
   "changed" signal and a ready-made inbox, tested on Postgres 17.
+- Android service that keeps the Realtime connection and shows the snapshot as notifications.

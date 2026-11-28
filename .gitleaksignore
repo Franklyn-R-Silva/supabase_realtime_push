@@ -1,0 +1,3 @@
+# Fake JWT in a test fixture ({"alg":"HS256"}.{"role":"anon"}."signature"), checked by hand on 2026-11-27.
+# The test now builds it at run time; this only covers the commit that had it as a literal.
+9845c904a5f3e55ee593f4f74017786a10808205:android/src/test/kotlin/dev/devfrs/supabase_realtime_push/PhoenixTest.kt:jwt:11

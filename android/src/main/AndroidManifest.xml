@@ -1,3 +1,34 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="dev.devfrs.supabase_realtime_push">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- REQUEST_IGNORE_BATTERY_OPTIMIZATIONS is left to the app on purpose: Google Play
+         allows it only for some app types, and a manifest merge would hand it to every app
+         using this package. Without it, requestIgnoreBatteryOptimizations opens the
+         settings list instead of the direct dialog. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Keeps the CPU awake for the few seconds of a snapshot read or a watch. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Before Android 8 an alerting notification vibrates only with it. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application>
+        <service
+            android:name=".RealtimePushService"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
+        <!-- System broadcasts reach receivers that are not exported. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".DismissReceiver"
+            android:exported="false" />
+    </application>
 </manifest>
