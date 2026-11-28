@@ -113,7 +113,9 @@ clients.
 
 **`null` response** means the topic/secret pair is not registered (the user
 signed out on another device, or the row was deleted). The service removes its
-notifications, stops itself and reports status `rejected`.
+notifications, stops itself and reports status `rejected`. A known pair never
+gets `null`: when `realtime_push_snapshot_for` returns `null`, the snapshot is
+`{"notifications": []}`.
 
 HTTP errors and timeouts (10 s) are retried on the next signal or reconnect;
 the shade is left as it was.
@@ -138,14 +140,16 @@ For each fetched snapshot, in order:
 Only what is new, changed (revision, title, body, silent, data or badge) or
 missing from the shade is posted; the rest is left alone. Android drops
 notification updates past 5 per second per app, so reposting everything on
-every snapshot loses changes. What is posted together keeps the snapshot's
+every snapshot loses changes; for the same reason posts go out at least 250 ms
+apart. What is posted together keeps the snapshot's
 order, first on top. Only the first shown notification carries `badge`:
 launchers that show a number add them up.
 
 Tapping a notification opens the app's launch activity and hands
 `{id, data}` to Dart. A tap counts as a dismissal at the shown revision:
 Android removes a tapped notification without telling the app, and the next
-snapshot would otherwise put it back.
+snapshot would otherwise put it back. Reopening the app from recents is not a
+tap, even when Android hands back the intent of the tap that first opened it.
 
 ## 5. The Android service
 
@@ -183,7 +187,7 @@ MethodChannel `supabase_realtime_push`.
 | `device` | — | `{topic, secret}` (creates them on first call) |
 | `start` | `{supabaseUrl, publishableKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?}` | `null`. Errors: `bad_arguments`; `start_failed` when Android refuses to start the service (from the background on Android 12+). The status stays `running`, so the next `start`, a reboot or an app update tries again |
 | `stop` | `{forgetDevice: bool}` | `null` |
-| `status` | — | `"stopped"`, `"running"` or `"rejected"` |
+| `status` | — | `"stopped"`, `"running"` or `"rejected"`. `"stopped"` also when this install has no device pair: Auto Backup restores the settings on a reinstall or a new phone, never the pair |
 | `isIgnoringBatteryOptimizations` | — | `bool` |
 | `requestIgnoreBatteryOptimizations` | — | `null`. Opens the direct dialog when the **app's** manifest declares `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, the battery-optimization settings list otherwise. The plugin never declares that permission itself: Google Play allows it only for apps that cannot use FCM, and a merged manifest would put it in every app |
 | `requestNotificationPermission` | — | `bool` (Android 13+ runtime permission; `true` below 13) |
@@ -203,9 +207,9 @@ a notification while the app is running.
 | `realtime_push_devices` | nobody directly (RLS on, no policies) | `topic`, `user_id`, `secret_hash`, `platform`, `created_at`, `seen_at` |
 | `realtime_push_register(p_topic, p_secret, p_platform default 'android')` | the app, signed in | Upserts the device for `auth.uid()`. A topic owned by another user is refused. Also deletes the caller's other devices not seen for 60 days |
 | `realtime_push_unregister(p_topic)` | the app, signed in | Deletes the caller's own device |
-| `realtime_push_snapshot(p_topic, p_secret)` | the service, `anon` (also `authenticated`) | Checks the pair, stamps `seen_at` (at most once a minute), returns `realtime_push_snapshot_for(user)` or `null` |
+| `realtime_push_snapshot(p_topic, p_secret)` | the service, `anon` (also `authenticated`) | Checks the pair, stamps `seen_at` (at most once a minute), returns `realtime_push_snapshot_for(user)` (an empty snapshot when that is `null`), or `null` for an unknown pair |
 | `realtime_push_snapshot_for(p_user)` | the snapshot function only | **Yours to replace** with `create or replace`; running the script again keeps your version. It runs inside `realtime_push_snapshot`, whose `search_path` is empty: give yours its own `set search_path`, or schema-qualify every name. The default reads `realtime_push_notifications` |
-| `realtime_push_signal(p_users uuid[])` | your triggers, `service_role` | `realtime.send('{}', 'changed', 'push:' \|\| topic, false)` to every device of those users. Errors become warnings: a push must never fail the write that caused it |
+| `realtime_push_signal(p_users uuid[])` | your triggers, `service_role` | `realtime.send('{}', 'changed', 'push:' \|\| topic, false)` to every device of those users seen in the last 60 days (a device that comes back reads the snapshot when it joins). Errors become warnings: a push must never fail the write that caused it |
 | `realtime_push_notifications` | the user reads own rows (RLS); writes go through the two functions below | A ready-made inbox. Any insert, update or delete signals the owners, once per statement |
 | `realtime_push_send(p_user, p_key, p_title, p_body default '', p_data default '{}', p_silent default false)` | your backend, `service_role` | Inserts an inbox row and returns its id. Same `p_key` = same notification |
 | `realtime_push_mark_read(p_key)` | the app, signed in | Sets `read_at` on the caller's unread rows of that key |

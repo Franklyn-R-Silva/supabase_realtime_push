@@ -3,7 +3,7 @@
 /// A native Android service holds one Supabase Realtime connection on a topic
 /// only this device knows. When your database signals a change, the service
 /// fetches the snapshot of notifications the device should show and makes the
-/// notification shade match it. See `docs/contract.md` for the whole design.
+/// notification shade match it. See `doc/contract.md` for the whole design.
 ///
 /// ```dart
 /// final device = await SupabaseRealtimePush.device();
@@ -89,10 +89,12 @@ class PushTap {
 
 /// What the service is doing.
 enum PushStatus {
-  /// Not started, or stopped by [SupabaseRealtimePush.stop].
+  /// Not started, stopped by [SupabaseRealtimePush.stop], or this install has
+  /// no device pair (the app was restored from a backup): register and start.
   stopped,
 
-  /// Connected or reconnecting, and showing the snapshot.
+  /// Turned on: the service runs, or comes back on the next app launch,
+  /// reboot or app update. Not a promise of a live connection right now.
   running,
 
   /// The database answered that this device is not registered (signed out

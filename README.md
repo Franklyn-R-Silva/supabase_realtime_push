@@ -14,7 +14,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
   <img src="https://img.shields.io/badge/platform-Android%207.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Platform: Android 7.0+" />
   <a href="https://supabase.com/docs/guides/realtime"><img src="https://img.shields.io/badge/Supabase-Realtime-3FCF8E?logo=supabase&amp;logoColor=white" alt="Supabase Realtime" /></a>
-  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A5%203.32-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32 or later" /></a>
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A5%203.44-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.44 or later" /></a>
 </p>
 
 <p align="center">
@@ -34,7 +34,7 @@
 </p>
 
 > **Status: work in progress, not published yet.** The design is in
-> [docs/contract.md](docs/contract.md).
+> [doc/contract.md](doc/contract.md).
 
 ---
 
@@ -193,6 +193,12 @@ Call `start` while the app is on screen: Android 12+ refuses to start a
 foreground service from the background. The service then survives the app
 being closed, the phone rebooting and the app updating.
 
+Run `device`, `realtime_push_register` and `start` again on every app start
+while a session exists and `status()` is not `running`. A reinstall or a new
+phone restores the app's settings from a backup but never the device pair, so
+that install reports `stopped` until it registers its own; a `rejected` device
+needs the same.
+
 ### 4. Sign out
 
 ```dart
@@ -298,9 +304,11 @@ create trigger chat_message_signal after insert on public.chat_messages
 - Use `p_user`, not `auth.uid()`: the device calls the snapshot without a
   session.
 - `revision` must grow whenever the notification should alert again.
+- Return at most about 20 notifications: Android keeps at most 50 per app and
+  drops the rest without an error.
 - Running `realtime_push.sql` again keeps your version; drop the function
   first to get the default back.
-- The shape is in [docs/contract.md §3](docs/contract.md#3-snapshot).
+- The shape is in [doc/contract.md §3](doc/contract.md#3-snapshot).
 
 ## Battery and the "connected" notification
 
@@ -365,6 +373,24 @@ Report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
   cannot use this package.
 
 ---
+
+## Troubleshooting
+
+The service logs under one tag, never the secret or what a notification says:
+
+```bash
+adb logcat -s SupabaseRealtimePush
+```
+
+| You see | Cause |
+|---|---|
+| `snapshot failed: HTTP 404` | `snapshotFunction` names a function that does not exist, or `realtime_push.sql` was not run |
+| `snapshot failed: HTTP 401` | Wrong `publishableKey` |
+| `socket failed HTTP 429` | The Realtime connection limit; see [Self-hosted Supabase](#self-hosted-supabase-raise-the-realtime-connection-limit-first) |
+| `join refused (error)` | Public Realtime channels are turned off in the project |
+| `the server does not know this device` | The device is not registered (status `rejected`): register it and `start` again |
+| `foreground not allowed from the background` | Android 12+ killed the service and the app is not exempt; it comes back when the app opens |
+| Nothing at all | `start` was never called on this install (`status()` is `stopped`) |
 
 ## Feedback and contributing
 

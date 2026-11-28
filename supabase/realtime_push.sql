@@ -29,7 +29,7 @@
 --       select realtime_push_mark_read('chat:42');
 --   - Already have your own unread data? Replace realtime_push_snapshot_for
 --     with `create or replace` (it gets the user id, and must return the JSON
---     in docs/contract.md section 3). It runs inside realtime_push_snapshot,
+--     in doc/contract.md section 3). It runs inside realtime_push_snapshot,
 --     whose search_path is empty: give yours `set search_path = public` or
 --     schema-qualify every name, or it fails with "relation does not exist"
 --     and the phones show nothing. Then call
@@ -43,7 +43,7 @@
 --       delete from public.realtime_push_notifications
 --        where read_at < now() - interval '30 days';
 --
--- Contract: docs/contract.md, sections 1, 3 and 7.
+-- Contract: doc/contract.md, sections 1, 3 and 7.
 
 -- =============================================================================
 -- Devices
@@ -271,7 +271,9 @@ begin
     update public.realtime_push_devices set seen_at = now() where topic = p_topic;
   end if;
 
-  return public.realtime_push_snapshot_for(v_user);
+  -- null means "unknown device" and stops the service for good; a replaced
+  -- snapshot_for that finds no rows must mean an empty shade instead.
+  return coalesce(public.realtime_push_snapshot_for(v_user), '{"notifications": []}'::jsonb);
 end;
 $$;
 
@@ -280,6 +282,9 @@ $$;
 -- =============================================================================
 
 -- Never raises: a push must not fail the write that caused it.
+-- Skips devices unseen for 60 days (an uninstalled app never comes back to be
+-- cleaned up): every live device stamps seen_at on each join and watch, and
+-- one that returns reads the snapshot when it joins, so nothing is lost.
 create or replace function public.realtime_push_signal(p_users uuid[])
 returns void
 language plpgsql
@@ -290,7 +295,8 @@ as $$
 begin
   perform realtime.send('{}'::jsonb, 'changed', 'push:' || d.topic, false)
      from public.realtime_push_devices d
-    where d.user_id = any (p_users);
+    where d.user_id = any (p_users)
+      and d.seen_at > now() - interval '60 days';
 exception when others then
   raise warning 'realtime_push_signal: % (%)', sqlerrm, sqlstate;
 end;

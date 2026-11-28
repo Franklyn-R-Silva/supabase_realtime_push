@@ -93,8 +93,10 @@ internal class Store(context: Context) {
                 .commit()
         }
 
+    // Auto Backup restores these prefs on a reinstall or a new phone, but not the device
+    // file: without a pair nothing can run, whatever the restored status says.
     var status: String
-        get() = prefs.getString(STATUS, null) ?: STOPPED
+        get() = if (credentials() == null) STOPPED else prefs.getString(STATUS, null) ?: STOPPED
         set(value) {
             prefs.edit().putString(STATUS, value).commit()
         }

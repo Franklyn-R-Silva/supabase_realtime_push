@@ -7,7 +7,7 @@
 
 <!-- What changes for an app that uses the package, and the problem it solves.
      If the Dart API, the service or the SQL now talk differently, update
-     docs/contract.md in this PR. -->
+     doc/contract.md in this PR. -->
 
 Closes #
 

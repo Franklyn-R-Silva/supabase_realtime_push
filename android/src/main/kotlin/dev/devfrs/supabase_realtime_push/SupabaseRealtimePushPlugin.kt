@@ -19,6 +19,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry
+import kotlin.concurrent.thread
 
 /** The `supabase_realtime_push` MethodChannel (contract §6). The service does the work; this only configures it. */
 class SupabaseRealtimePushPlugin :
@@ -225,13 +226,18 @@ class SupabaseRealtimePushPlugin :
      */
     private fun readTap(intent: Intent?): Map<String, String?>? {
         if (intent?.action != Shade.ACTION_TAP) return null
+        // Reopened from recents after the process died: Android hands back the original
+        // intent, key included, and the old tap would navigate again.
+        if ((intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return null
         val id = intent.getStringExtra(Shade.EXTRA_ID)
         // The launch activity is exported: only intents carrying this install's key are taps.
         val genuine = intent.getStringExtra(Shade.EXTRA_KEY) == Store(context).tapKey()
         // Consumed, so the same intent read again (a re-attach) is not a second tap.
         intent.removeExtra(Shade.EXTRA_KEY)
         if (!genuine || id == null) return null
-        Shade(context).dismissed(id, intent.getLongExtra(Shade.EXTRA_REVISION, Long.MIN_VALUE))
+        val revision = intent.getLongExtra(Shade.EXTRA_REVISION, Long.MIN_VALUE)
+        // Off the main thread: it waits for a snapshot being posted, which can take seconds.
+        thread { Shade(context).dismissed(id, revision) }
         return mapOf("id" to id, "data" to intent.getStringExtra(Shade.EXTRA_DATA))
     }
 }

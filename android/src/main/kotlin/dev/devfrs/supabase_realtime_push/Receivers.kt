@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import kotlin.concurrent.thread
 
 /**
  * Brings the service back after a reboot and after an app update. Installing an update
@@ -27,6 +28,15 @@ internal class BootReceiver : BroadcastReceiver() {
 internal class DismissReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra(Shade.EXTRA_ID) ?: return
-        Shade(context).dismissed(id, intent.getLongExtra(Shade.EXTRA_REVISION, Long.MIN_VALUE))
+        val revision = intent.getLongExtra(Shade.EXTRA_REVISION, Long.MIN_VALUE)
+        // Off the main thread: it waits for a snapshot being posted, which can take seconds.
+        val pending = goAsync()
+        thread {
+            try {
+                Shade(context).dismissed(id, revision)
+            } finally {
+                pending.finish()
+            }
+        }
     }
 }

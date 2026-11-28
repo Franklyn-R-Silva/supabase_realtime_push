@@ -21,9 +21,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# The JVM tests of the Kotlin side. Gradle runs from the example app, the only
-# Android project that includes the plugin; with a path filter this check
-# cannot be required on main, or it would wait forever on PRs that skip it.
+# The example APK, then the JVM tests and lint of the Kotlin side. Gradle runs
+# from the example app, the only Android project that includes the plugin; with
+# a path filter this check cannot be required on main, or it would wait forever
+# on PRs that skip it.
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -41,11 +42,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Writes local.properties and the Gradle wrapper jar, both git-ignored.
-      - name: Generate the Gradle setup
+      # A real app build, not only the plugin's: manifest merging and the AAR
+      # metadata checks (minimum compileSdk of a dependency, say) run only here.
+      # It also writes local.properties and the Gradle wrapper jar.
+      - name: Build the example APK
         working-directory: example
-        run: flutter build apk --config-only
+        run: flutter build apk --debug
 
       - name: Kotlin unit tests
         working-directory: example/android
         run: ./gradlew :supabase_realtime_push:testDebugUnitTest --no-daemon
+
+      # Catches calls to APIs newer than minSdk 24 without a version check.
+      - name: Android lint
+        working-directory: example/android
+        run: ./gradlew :supabase_realtime_push:lintDebug --no-daemon

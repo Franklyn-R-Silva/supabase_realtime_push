@@ -522,6 +522,11 @@ begin
          'her phone stays';
   assert exists (select 1 from public.realtime_push_devices where topic = test.pad43('bob-phone')),
          'bob''s stale phone is not hers to drop';
+
+  truncate realtime.sent;
+  perform public.realtime_push_signal(array[md5('alice')::uuid, md5('bob')::uuid]);
+  assert (select array_agg(topic) from realtime.sent) = array['push:' || test.pad43('alice-phone')],
+         'a device unseen for 60 days gets no signal';
 end
 $$;
 
@@ -558,6 +563,23 @@ begin
          = '{"badge": 7, "notifications": []}'::jsonb, 'the replacement is kept';
   perform test.act_as('authenticated', md5('alice')::uuid);
   perform test.expect_error($q$select public.realtime_push_snapshot_for(md5('alice')::uuid)$q$, '42501');
+  perform test.act_as('postgres');
+end
+$$;
+
+\echo '== a replacement that returns null is an empty shade, not a rejection'
+create or replace function public.realtime_push_snapshot_for(p_user uuid)
+returns jsonb language sql stable as $$
+  select null::jsonb
+$$;
+
+do $$
+begin
+  perform test.act_as('anon');
+  assert public.realtime_push_snapshot(test.pad43('alice-phone'), test.pad43('alice-secret-2'))
+         = '{"notifications": []}'::jsonb, 'null from the replacement becomes an empty snapshot';
+  assert public.realtime_push_snapshot(test.pad43('alice-phone'), test.pad43('wrong')) is null,
+         'a wrong pair still gets null';
   perform test.act_as('postgres');
 end
 $$;
