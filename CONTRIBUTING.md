@@ -9,7 +9,7 @@ Thanks for helping. Issues and PRs are welcome; a short report beats none.
 | `lib/` | The Dart API apps call |
 | `android/` | The native service: Realtime client, snapshot fetch, notifications |
 | `supabase/` | The SQL your project runs (tables and functions the service talks to) |
-| `docs/contract.md` | How the three talk to each other. Change it in the same PR as the code |
+| `doc/contract.md` | How the three talk to each other. Change it in the same PR as the code |
 | `example/` | A small app that registers the device and starts the service |
 
 ## Before you open a PR
@@ -32,6 +32,23 @@ CI runs the same checks on every PR.
 Every change in behaviour comes with a test that fails without it: Dart in
 `test/`, Kotlin in `android/src/test/`, SQL in `supabase/test/`. A bug fix
 starts with the test that shows the bug.
+
+## Before a release
+
+The service's lifecycle runs only on a real Android, so check it by hand on
+the example app, against a real project, before tagging:
+
+| Check | Android 8 | 12 | 14 | 15+ |
+|---|---|---|---|---|
+| Send arrives with the app closed, screen on (exempt, then not exempt) | | | | |
+| Screen off, `adb shell dumpsys deviceidle force-idle`: arrives at the next watch | | | | |
+| Reboot, then send: arrives without opening the app | | | | |
+| Install an update (`flutter install`), then send | | | | |
+| Airplane mode on, send, airplane mode off: arrives | | | | |
+| Swipe away, then send the same revision: stays away | | | | |
+| Tap: the app gets `{id, data}`; reopen from recents: no second tap | | | | |
+| `realtime_push_unregister` from SQL: the shade clears, status `rejected` | | | | |
+| Sign out: the shade clears, status `stopped` | | | | |
 
 ## Commits and PR titles
 

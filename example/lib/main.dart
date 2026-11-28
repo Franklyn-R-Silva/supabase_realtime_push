@@ -1,4 +1,4 @@
-// package:material_ui needs Flutter 3.47; the example still supports 3.35.
+// package:material_ui needs Flutter 3.47; the example still supports 3.44.
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';

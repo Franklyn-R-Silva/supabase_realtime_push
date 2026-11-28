@@ -6,7 +6,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 environment:
   # supabase_flutter 2.18 needs Dart 3.9 (Flutter 3.35); the package itself
-  # supports 3.32.
+  # needs Flutter 3.44.
   sdk: ^3.9.0
 
 # Dependencies specify other packages that your package needs in order to work.

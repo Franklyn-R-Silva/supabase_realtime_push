@@ -12,3 +12,5 @@
 - `supabase/realtime_push.sql`: device registration, the snapshot, the
   "changed" signal and a ready-made inbox, tested on Postgres 17.
 - Android service that keeps the Realtime connection and shows the snapshot as notifications.
+- Needs Flutter 3.44 or later: the Android build relies on Flutter applying
+  the Kotlin plugin to apps without AGP 9's built-in Kotlin.

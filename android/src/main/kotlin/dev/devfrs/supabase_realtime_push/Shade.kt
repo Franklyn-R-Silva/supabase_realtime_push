@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 
@@ -34,6 +35,13 @@ internal class Shade(private val context: Context) {
          * reposted at once.
          */
         private val LOCK = Any()
+
+        /**
+         * Android silently drops updates of a shown notification past 5 per second per app,
+         * and the memory would then call them posted. Posts 250 ms apart stay under it.
+         */
+        private const val POST_GAP_MS = 250L
+        private var lastPostAt = 0L // guarded by LOCK
     }
 
     private val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -70,7 +78,11 @@ internal class Shade(private val context: Context) {
         for (id in plan.cancel) manager.cancel(id, NOTIFICATION_ID)
         val now = System.currentTimeMillis()
         // A decreasing `when` keeps the snapshot's order among what is posted together, first on top.
-        plan.post.forEachIndexed { i, post -> notify(post, config, now - i) }
+        plan.post.forEachIndexed { i, post ->
+            // A stop() waiting on the lock gets in within one gap.
+            if (i > 0 && store.status != Store.RUNNING) return
+            notify(post, config, now - i)
+        }
         store.saveMemory(plan.memory)
         Log.d(TAG, "shade: ${plan.post.size} posted, ${plan.cancel.size} removed")
     }
@@ -111,11 +123,15 @@ internal class Shade(private val context: Context) {
         // Before Android 8 the notification, not the channel, carries sound and vibration.
         if (post.alert) builder.setDefaults(NotificationCompat.DEFAULT_ALL)
         post.badge?.let { builder.setNumber(it) }
+        // Only the snapshot thread posts, so the wait never blocks the main thread.
+        val wait = lastPostAt + POST_GAP_MS - SystemClock.elapsedRealtime()
+        if (wait > 0) Thread.sleep(wait)
         try {
             manager.notify(n.id, NOTIFICATION_ID, builder.build())
         } catch (e: SecurityException) {
             Log.w(TAG, "notification not posted: no permission")
         }
+        lastPostAt = SystemClock.elapsedRealtime()
     }
 
     /**

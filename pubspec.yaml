@@ -22,7 +22,10 @@ topics:
 
 environment:
   sdk: ^3.8.0
-  flutter: ">=3.32.0"
+  # android/build.gradle.kts is the AGP 9 template: it does not apply the Kotlin
+  # plugin itself. Flutter's Gradle tooling applies it for apps without built-in
+  # Kotlin from 3.44 on; older apps fail with "Unresolved reference: kotlin".
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
