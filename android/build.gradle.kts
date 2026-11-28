@@ -2,7 +2,7 @@ group = "dev.devfrs.supabase_realtime_push"
 version = "1.0-SNAPSHOT"
 
 buildscript {
-    val kotlinVersion = "2.4.0"
+    val kotlinVersion = "2.4.21"
     repositories {
         google()
         mavenCentral()
@@ -72,7 +72,7 @@ kotlin {
 }
 
 dependencies {
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.1")
     implementation("androidx.core:core:1.16.0")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test")
