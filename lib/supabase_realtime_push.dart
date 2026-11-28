@@ -159,6 +159,10 @@ abstract final class SupabaseRealtimePush {
   ///   Android requires while the app is not exempt from battery optimization.
   /// - [smallIcon]: a drawable resource name for the status bar; the app icon
   ///   when null.
+  /// - [channels]: more notification channels, id to the name users see in
+  ///   settings, so they can mute one kind (offers, say) and keep another. A
+  ///   snapshot entry with `"channel": "<id>"` posts to that channel; any
+  ///   other goes to [channelName].
   static Future<void> start({
     required Uri supabaseUrl,
     required String publishableKey,
@@ -167,6 +171,7 @@ abstract final class SupabaseRealtimePush {
     String connectedTitle = 'Connected',
     String connectedText = 'Waiting for new notifications',
     String? smallIcon,
+    Map<String, String> channels = const {},
   }) async {
     if (!supabaseUrl.isScheme('https') && !supabaseUrl.isScheme('http') ||
         supabaseUrl.host.isEmpty) {
@@ -190,6 +195,15 @@ abstract final class SupabaseRealtimePush {
         'must be a plain SQL function name',
       );
     }
+    for (final MapEntry(:key, :value) in channels.entries) {
+      if (key.trim().isEmpty || value.trim().isEmpty) {
+        throw ArgumentError.value(
+          channels,
+          'channels',
+          'ids and names must not be empty',
+        );
+      }
+    }
     if (!isSupported) return;
     // No tap handler here: a tap with nobody listening to [taps] would be
     // dropped, while the platform keeps it for [launchTap] until Dart asks.
@@ -201,6 +215,7 @@ abstract final class SupabaseRealtimePush {
       'connectedTitle': connectedTitle,
       'connectedText': connectedText,
       'smallIcon': smallIcon,
+      'channels': channels,
     });
   }
 

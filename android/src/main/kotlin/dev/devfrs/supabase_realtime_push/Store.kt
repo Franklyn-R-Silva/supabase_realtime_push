@@ -17,6 +17,8 @@ internal data class Config(
     val connectedTitle: String,
     val connectedText: String,
     val smallIcon: String?,
+    /** Extra message channels, id to the name users see in settings. */
+    val channels: Map<String, String> = emptyMap(),
 )
 
 internal data class Credentials(val topic: String, val secret: String)
@@ -78,6 +80,7 @@ internal class Store(context: Context) {
                 connectedTitle = prefs.getString("connectedTitle", null) ?: return null,
                 connectedText = prefs.getString("connectedText", null) ?: return null,
                 smallIcon = prefs.getString("smallIcon", null),
+                channels = readMap("channels") { json, id -> json.optString(id) },
             )
         }
         set(value) {
@@ -90,6 +93,7 @@ internal class Store(context: Context) {
                 .putString("connectedTitle", value?.connectedTitle)
                 .putString("connectedText", value?.connectedText)
                 .putString("smallIcon", value?.smallIcon)
+                .putString("channels", value?.channels?.let { JSONObject(it).toString() })
                 .commit()
         }
 

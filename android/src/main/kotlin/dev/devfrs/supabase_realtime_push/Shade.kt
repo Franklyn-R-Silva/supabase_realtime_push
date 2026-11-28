@@ -33,6 +33,8 @@ internal class Shade(private val context: Context) {
         const val EXTRA_KEY = "dev.devfrs.supabase_realtime_push.KEY"
         const val EXTRA_TITLE = "dev.devfrs.supabase_realtime_push.TITLE"
         const val EXTRA_BODY = "dev.devfrs.supabase_realtime_push.BODY"
+        const val EXTRA_CHANNEL = "dev.devfrs.supabase_realtime_push.CHANNEL"
+        const val EXTRA_LARGE_ICON = "dev.devfrs.supabase_realtime_push.LARGE_ICON"
 
         /** The RemoteInput result key: what the user typed. */
         const val KEY_REPLY_TEXT = "dev.devfrs.supabase_realtime_push.REPLY_TEXT"
@@ -50,19 +52,26 @@ internal class Shade(private val context: Context) {
          */
         private const val POST_GAP_MS = 250L
         private var lastPostAt = 0L // guarded by LOCK
+
+        /** Prefixed, so a channel id given to `start` never takes over one the app created itself. */
+        fun channelId(id: String) = "$MESSAGES_CHANNEL.$id"
     }
 
     private val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val store = Store(context)
 
-    /** Updating an existing channel only changes its name; sound and importance stay the user's. */
+    /**
+     * Updating an existing channel only changes its name; sound and importance stay the user's.
+     * shortcut: a channel dropped from `channels` stays in the app's settings; delete it if apps rename ids often.
+     */
     fun createChannels(config: Config?) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val messages = NotificationChannel(MESSAGES_CHANNEL, config?.channelName ?: appLabel(), NotificationManager.IMPORTANCE_HIGH)
-            .apply { enableVibration(true) }
+        fun messages(id: String, name: String) =
+            NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) }
+        manager.createNotificationChannel(messages(MESSAGES_CHANNEL, config?.channelName ?: appLabel()))
+        config?.channels?.forEach { (id, name) -> manager.createNotificationChannel(messages(channelId(id), name)) }
         val connection = NotificationChannel(CONNECTION_CHANNEL, config?.connectedTitle ?: appLabel(), NotificationManager.IMPORTANCE_LOW)
             .apply { setShowBadge(false) }
-        manager.createNotificationChannel(messages)
         manager.createNotificationChannel(connection)
     }
 
@@ -125,8 +134,10 @@ internal class Shade(private val context: Context) {
 
     private fun notify(post: Post, config: Config, `when`: Long, unsent: CharSequence? = null) {
         val n = post.notification
-        val builder = NotificationCompat.Builder(context, MESSAGES_CHANNEL)
+        val channel = n.channel?.takeIf { it in config.channels }?.let(::channelId) ?: MESSAGES_CHANNEL
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(smallIcon(config))
+            .setLargeIcon(LargeIcons.get(n.largeIcon))
             .setContentTitle(n.title)
             .setContentText(n.body)
             .setStyle(n.body?.let { NotificationCompat.BigTextStyle().bigText(it) })
@@ -154,6 +165,9 @@ internal class Shade(private val context: Context) {
             manager.notify(n.id, NOTIFICATION_ID, builder.build())
         } catch (e: SecurityException) {
             Log.w(TAG, "notification not posted: no permission")
+        } catch (e: RuntimeException) {
+            // Too big for the binder, say. Thrown out of apply, it skipped saveMemory and the rest re-alerted on every snapshot.
+            Log.w(TAG, "notification not posted: ${e.javaClass.simpleName}")
         }
         lastPostAt = SystemClock.elapsedRealtime()
     }
@@ -206,6 +220,8 @@ internal class Shade(private val context: Context) {
             .putExtra(EXTRA_TITLE, n.title)
             .putExtra(EXTRA_BODY, n.body)
             .putExtra(EXTRA_DATA, n.data)
+            .putExtra(EXTRA_CHANNEL, n.channel)
+            .putExtra(EXTRA_LARGE_ICON, n.largeIcon)
         // Mutable, or the system cannot add the typed text; the explicit component keeps that safe.
         val reply = PendingIntentCompat.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT, true)
         return NotificationCompat.Action.Builder(0, label, reply)

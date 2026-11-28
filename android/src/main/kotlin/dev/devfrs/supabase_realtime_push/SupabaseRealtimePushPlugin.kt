@@ -121,6 +121,8 @@ class SupabaseRealtimePushPlugin :
             connectedTitle = text("connectedTitle") ?: return bad("connectedTitle is required"),
             connectedText = text("connectedText") ?: return bad("connectedText is required"),
             smallIcon = text("smallIcon"),
+            channels = call.argument<Map<String, String>>("channels").orEmpty()
+                .filter { (id, name) -> id.isNotBlank() && name.isNotBlank() },
         )
         val store = Store(context)
         store.credentialsOrCreate()

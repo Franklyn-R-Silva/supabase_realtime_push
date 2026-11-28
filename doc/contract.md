@@ -93,6 +93,8 @@ Response:
       "body": "See you at 3",
       "silent": false,
       "reply": true,
+      "channel": "chat",
+      "largeIcon": "https://example.com/avatars/ana.png",
       "data": {"route": "/chat/42"}
     }
   ]
@@ -108,6 +110,8 @@ Response:
 | `notifications[].body` | string, optional | |
 | `notifications[].silent` | bool, optional (false) | Show without sound or vibration |
 | `notifications[].reply` | bool, optional (false) | Offer a Reply action in the shade (section 9) |
+| `notifications[].channel` | string, optional | One of the channel ids given to `start`; a missing or unknown one posts to the default channel |
+| `notifications[].largeIcon` | string, optional | An `https://` picture shown beside the text, such as the sender's avatar. Anything else is ignored. Downloaded before the shade is updated (at most 1 MB each, 5 s for all of a snapshot's icons together, kept in memory); one that fails or does not fit in time shows the notification without it |
 | `notifications[].data` | object, optional | Handed back to Dart when the user taps |
 
 Unknown fields are ignored, so the server can add fields without breaking old
@@ -139,7 +143,7 @@ For each fetched snapshot, in order:
 3. Alerted revisions are pruned to the ids in the snapshot; a dismissed
    revision is kept only while it still hides something (`revision <= r`).
 
-Only what is new, changed (revision, title, body, silent, reply, data or badge) or
+Only what is new, changed (revision, title, body, silent, reply, channel, largeIcon, data or badge) or
 missing from the shade is posted; the rest is left alone. Android drops
 notification updates past 5 per second per app, so reposting everything on
 every snapshot loses changes; for the same reason posts go out at least 250 ms
@@ -191,7 +195,7 @@ MethodChannel `supabase_realtime_push`.
 | Method | Arguments | Returns |
 |---|---|---|
 | `device` | — | `{topic, secret}` (creates them on first call) |
-| `start` | `{supabaseUrl, publishableKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?}` | `null`. Errors: `bad_arguments`; `start_failed` when Android refuses to start the service (from the background on Android 12+). The status stays `running`, so the next `start`, a reboot or an app update tries again |
+| `start` | `{supabaseUrl, publishableKey, snapshotFunction, channelName, connectedTitle, connectedText, smallIcon?, channels}` (`channels`: id → name, Android channel id `supabase_realtime_push_messages.<id>`) | `null`. Errors: `bad_arguments`; `start_failed` when Android refuses to start the service (from the background on Android 12+). The status stays `running`, so the next `start`, a reboot or an app update tries again |
 | `stop` | `{forgetDevice: bool}` | `null` |
 | `status` | — | `"stopped"`, `"running"` or `"rejected"`. `"stopped"` also when this install has no device pair: Auto Backup restores the settings on a reinstall or a new phone, never the pair |
 | `isIgnoringBatteryOptimizations` | — | `bool` |
@@ -225,7 +229,7 @@ a notification while the app is running.
 
 The default snapshot has one notification per `key`: its newest unread row,
 with `revision` = that row's id. Newest first, at most 20; `badge` counts every
-unread row. It never sets `reply`.
+unread row. It never sets `reply`, `channel` or `largeIcon`.
 
 `secret_hash` is `sha256()` of the secret's UTF-8 bytes, built into Postgres
 11 and later, so no extension is needed.

@@ -16,6 +16,10 @@ internal data class SnapshotNotification(
     val data: String?,
     /** Offer a Reply action; the text goes to `realtime_push_reply`. */
     val reply: Boolean = false,
+    /** One of the channel ids given to `start`; anything else posts to the default channel. */
+    val channel: String? = null,
+    /** An https URL of a picture shown beside the text, such as the sender's avatar. */
+    val largeIcon: String? = null,
 )
 
 internal data class Snapshot(val badge: Int?, val notifications: List<SnapshotNotification>)
@@ -57,6 +61,8 @@ private fun parseNotification(json: JSONObject): SnapshotNotification? {
         silent = json.opt("silent") as? Boolean ?: false,
         data = json.optJSONObject("data")?.toString(),
         reply = json.opt("reply") as? Boolean ?: false,
+        channel = json.opt("channel") as? String,
+        largeIcon = (json.opt("largeIcon") as? String)?.takeIf { it.startsWith("https://") },
     )
 }
 

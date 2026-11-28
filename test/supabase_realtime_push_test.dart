@@ -89,7 +89,33 @@ void main() {
         'connectedTitle': 'Connected',
         'connectedText': 'Waiting for new notifications',
         'smallIcon': null,
+        'channels': <String, String>{},
       });
+    });
+
+    test('sends the extra channels and rejects empty ids or names', () async {
+      await SupabaseRealtimePush.start(
+        supabaseUrl: Uri.parse('https://xyz.supabase.co'),
+        publishableKey: 'anon',
+        channels: {'offers': 'Offers'},
+      );
+      expect((calls.single.arguments as Map)['channels'], {'offers': 'Offers'});
+
+      for (final channels in [
+        {' ': 'Offers'},
+        {'offers': ''},
+      ]) {
+        await expectLater(
+          SupabaseRealtimePush.start(
+            supabaseUrl: Uri.parse('https://xyz.supabase.co'),
+            publishableKey: 'anon',
+            channels: channels,
+          ),
+          throwsArgumentError,
+          reason: '$channels',
+        );
+      }
+      expect(calls, hasLength(1));
     });
 
     test('rejects a URL that is not http or https', () async {

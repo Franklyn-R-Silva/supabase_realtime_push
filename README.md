@@ -80,6 +80,7 @@ swipe it away (see [Battery](#battery-and-the-connected-notification)).
   [taps](#6-handle-taps)
 - [Your own data instead of the inbox](#your-own-data-instead-of-the-inbox)
 - [Reply from the notification](#reply-from-the-notification)
+- [Channels and pictures](#channels-and-pictures)
 - [Battery and the "connected" notification](#battery-and-the-connected-notification)
 - [Security](#security)
 - [Limits](#limits)
@@ -358,6 +359,36 @@ end $$;
       <string name="supabase_realtime_push_reply_failed">Não enviada</string>
   </resources>
   ```
+
+## Channels and pictures
+
+Android lets users mute one kind of notification and keep another, by
+channel. Declare yours in `start`, then pick one per notification in your
+`realtime_push_snapshot_for`:
+
+```dart
+await SupabaseRealtimePush.start(
+  supabaseUrl: Uri.parse('https://<ref>.supabase.co'),
+  publishableKey: '<publishable or anon key>',
+  channelName: 'Messages',
+  channels: {'offers': 'Offers'},
+);
+```
+
+```sql
+'channel', 'offers',
+'largeIcon', 'https://example.com/avatars/' || c.sender_id || '.png'
+```
+
+- A notification without `channel`, or with one `start` did not declare, goes
+  to the `channelName` channel.
+- `largeIcon` is a picture beside the text, such as the sender's avatar:
+  `https://` only, at most 1 MB. It is downloaded before the notification
+  shows, 5 seconds at most for all of them; if it fails, the notification
+  shows without it.
+- Android keeps a channel's sound and importance as the user set them. A
+  channel you stop declaring stays in the app's settings until a reinstall.
+- The ready-made inbox sets neither.
 
 ## Battery and the "connected" notification
 

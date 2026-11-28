@@ -68,6 +68,7 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
     private lateinit var store: Store
     private lateinit var shade: Shade
     private lateinit var http: OkHttpClient
+    private lateinit var icons: OkHttpClient
     private lateinit var wakeLock: PowerManager.WakeLock
     private val fetcher = Executors.newSingleThreadExecutor()
     private val funnel = FetchFunnel()
@@ -106,6 +107,8 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         // finds dead sockets, and a second clock out of phase would wake the radio twice as often.
         val socketClient = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(0, TimeUnit.MILLISECONDS).build()
         http = socketClient.newBuilder().callTimeout(10, TimeUnit.SECONDS).build()
+        // An https icon never redirects to http.
+        icons = http.newBuilder().followSslRedirects(false).build()
         socket = PhoenixSocket(socketClient, handler, this)
         ContextCompat.registerReceiver(this, screenOn, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED)
     }
@@ -282,7 +285,11 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         val creds = credentials ?: return
         if (stopped) return
         when (val result = fetchSnapshot(http, c, creds)) {
-            is SnapshotResult.Ok -> if (!stopped) shade.apply(result.snapshot, c)
+            is SnapshotResult.Ok -> {
+                val iconSize = resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_width)
+                if (!stopped) LargeIcons.prefetch(icons, result.snapshot.notifications, iconSize)
+                if (!stopped) shade.apply(result.snapshot, c)
+            }
             is SnapshotResult.Rejected -> {
                 Log.w(TAG, "the server does not know this device: stopping")
                 store.status = Store.REJECTED

@@ -9,7 +9,7 @@ internal data class Plan(val cancel: Set<String>, val post: List<Post>, val memo
 
 /** Everything a posted notification shows or carries; equal signatures need no repost. */
 internal fun signature(post: Post): String = post.notification.run {
-    JSONArray(listOf(revision, title, body, silent, data, post.badge, reply)).toString()
+    JSONArray(listOf(revision, title, body, silent, data, post.badge, reply, channel, largeIcon)).toString()
 }
 
 /**
