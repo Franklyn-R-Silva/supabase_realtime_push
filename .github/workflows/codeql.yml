@@ -1,0 +1,67 @@
+# CodeQL looks for vulnerabilities in the workflows and in the Kotlin side of
+# the plugin, and files them under Security > Code scanning. This replaces
+# GitHub's default setup, which could only scan the workflows: the Kotlin has to
+# be compiled to be scanned, and only the example app's Gradle build does that.
+# The two cannot both upload, so default setup stays off.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '41 5 * * 3'
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write # upload the results to code scanning
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - if: matrix.build-mode == 'manual'
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # The same build as android.yaml: the example app is the only Android
+      # project that includes the plugin, so its APK build compiles the Kotlin
+      # CodeQL extracts.
+      - if: matrix.build-mode == 'manual'
+        name: Build the example APK
+        run: |
+          flutter pub get
+          cd example
+          flutter build apk --debug
+
+      - uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          category: /language:${{ matrix.language }}
