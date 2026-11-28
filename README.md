@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://pub.dev/packages/supabase_realtime_push"><img src="https://img.shields.io/pub/v/supabase_realtime_push.svg" alt="pub package" /></a>
   <a href="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/ci.yaml"><img src="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/ci.yaml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/github-code-scanning/codeql/badge.svg" alt="CodeQL" /></a>
+  <a href="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/codeql.yml"><img src="https://github.com/Franklyn-R-Silva/supabase_realtime_push/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" /></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/Franklyn-R-Silva/supabase_realtime_push"><img src="https://api.scorecard.dev/projects/github.com/Franklyn-R-Silva/supabase_realtime_push/badge" alt="OpenSSF Scorecard" /></a>
   <a href="https://www.bestpractices.dev/projects/17222"><img src="https://www.bestpractices.dev/projects/17222/badge" alt="OpenSSF Best Practices" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
