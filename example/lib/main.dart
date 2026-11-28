@@ -103,6 +103,12 @@ class _PushDemoState extends State<PushDemo> {
   // asks it for a snapshot, or the first answer is `rejected`.
   Future<void> _turnOn() => _run(() async {
     await SupabaseRealtimePush.requestNotificationPermission();
+    // Asked once, while turning on: exempt, the service needs no "connected"
+    // notification and keeps the network in Doze. Granting it later works
+    // too; the service drops that notification on its next check.
+    if (!await SupabaseRealtimePush.isIgnoringBatteryOptimizations()) {
+      await SupabaseRealtimePush.requestIgnoreBatteryOptimizations();
+    }
     final device = await SupabaseRealtimePush.device();
     await _supabase.rpc<void>(
       'realtime_push_register',

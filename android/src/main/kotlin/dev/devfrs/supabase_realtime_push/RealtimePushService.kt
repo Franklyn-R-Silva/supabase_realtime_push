@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import okhttp3.OkHttpClient
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 /**
  * Holds the Realtime connection with the app closed and keeps the shade equal to the
@@ -28,7 +29,12 @@ import java.util.concurrent.TimeUnit
  * Foreground, with the "connected" notification, only while the app is not exempt from
  * battery optimization: an exempt app may run a background service, anything else is
  * stopped about a minute after the app leaves the screen. The choice is re-made on every
- * start command, the periodic watch included.
+ * start command, the periodic watch included. With `foregroundService: false` it never goes
+ * foreground: not exempt, it runs while the app is open and Android stops it soon after.
+ *
+ * The watch is an alarm broadcast to [WatchReceiver], which hands it to this service when
+ * Android lets it start, and otherwise reads the snapshot itself ([readWithoutService]): the
+ * system killed the service, or `foregroundService` is off and the app is closed.
  *
  * With the screen off it does not reconnect. The CPU sleeps, heartbeats stop, and the
  * server closes the idle socket within a minute; reconnecting then meant one TLS
@@ -37,7 +43,7 @@ import java.util.concurrent.TimeUnit
  */
 internal class RealtimePushService : Service(), PhoenixSocket.Listener {
     companion object {
-        private const val ACTION_WATCH = "dev.devfrs.supabase_realtime_push.WATCH"
+        const val ACTION_WATCH = "dev.devfrs.supabase_realtime_push.WATCH"
 
         /** Started with startForegroundService: Android kills the app unless startForeground follows, exempt or not. */
         private const val EXTRA_FOREGROUND_REQUIRED = "dev.devfrs.supabase_realtime_push.FOREGROUND_REQUIRED"
@@ -47,7 +53,7 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         /** Throws when Android refuses (Android 12+ from the background, for instance). */
         fun start(context: Context) {
             val intent = Intent(context, RealtimePushService::class.java)
-            if (isIgnoringBatteryOptimizations(context)) {
+            if (isIgnoringBatteryOptimizations(context) || Store(context).config?.foregroundService == false) {
                 context.startService(intent)
             } else {
                 ContextCompat.startForegroundService(context, intent.putExtra(EXTRA_FOREGROUND_REQUIRED, true))
@@ -55,7 +61,54 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         }
 
         fun stop(context: Context) {
+            // The service may be gone already, its watch still set: the alarm outlives the process.
+            cancelWatch(context)
             context.stopService(Intent(context, RealtimePushService::class.java))
+        }
+
+        /** Without SCHEDULE_EXACT_ALARM: Android may defer it, more so in Doze and for an app seldom opened. */
+        fun scheduleWatch(context: Context) {
+            val at = SystemClock.elapsedRealtime() + WATCH_INTERVAL_MS
+            try {
+                (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
+                    .setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, watchIntent(context))
+            } catch (e: Exception) {
+                Log.w(TAG, "watch not scheduled: ${e.javaClass.simpleName}")
+            }
+        }
+
+        fun cancelWatch(context: Context) {
+            (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(watchIntent(context))
+        }
+
+        private fun watchIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            Intent(context, WatchReceiver::class.java).setAction(ACTION_WATCH),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        /** For [readWithoutService], which has no service to own a client. */
+        private val alone by lazy { OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).callTimeout(10, TimeUnit.SECONDS).build() }
+
+        /**
+         * The watch without the service, on a background thread: schedules the next one first, so a
+         * failure here never ends the watch, then reads and applies the snapshot under a wake lock.
+         */
+        fun readWithoutService(context: Context, http: OkHttpClient = alone) {
+            val store = Store(context)
+            if (store.status != Store.RUNNING) return
+            val config = store.config ?: return
+            val credentials = store.credentials() ?: return
+            scheduleWatch(context)
+            val wakeLock = (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "supabase_realtime_push:watch")
+            wakeLock.acquire(WAKE_MS)
+            try {
+                if (!readSnapshot(context, http, config, credentials, Shade(context), store)) cancelWatch(context)
+            } finally {
+                if (wakeLock.isHeld) wakeLock.release()
+            }
         }
 
         fun isIgnoringBatteryOptimizations(context: Context): Boolean =
@@ -68,7 +121,6 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
     private lateinit var store: Store
     private lateinit var shade: Shade
     private lateinit var http: OkHttpClient
-    private lateinit var icons: OkHttpClient
     private lateinit var wakeLock: PowerManager.WakeLock
     private val fetcher = Executors.newSingleThreadExecutor()
     private val funnel = FetchFunnel()
@@ -107,8 +159,6 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         // finds dead sockets, and a second clock out of phase would wake the radio twice as often.
         val socketClient = OkHttpClient.Builder().connectTimeout(15, TimeUnit.SECONDS).readTimeout(0, TimeUnit.MILLISECONDS).build()
         http = socketClient.newBuilder().callTimeout(10, TimeUnit.SECONDS).build()
-        // An https icon never redirects to http.
-        icons = http.newBuilder().followSslRedirects(false).build()
         socket = PhoenixSocket(socketClient, handler, this)
         ContextCompat.registerReceiver(this, screenOn, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED)
     }
@@ -128,6 +178,8 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
             // restart, the watch). A background service would be stopped within a minute anyway.
             // The status stays running: the next app launch starts it again.
             Log.w(TAG, "foreground not allowed from the background: waiting for the app to open")
+            // Until then the watch reads the snapshot without the service.
+            thread(name = "supabase-realtime-push-watch") { readWithoutService(applicationContext) }
             stopSelf()
             return START_NOT_STICKY
         }
@@ -142,13 +194,13 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
                 changed || !socket.active -> reconnectNow()
             }
         }
-        scheduleWatch()
+        scheduleWatch(this)
         return START_STICKY
     }
 
     override fun onDestroy() {
         stopped = true
-        if (store.status != Store.RUNNING) cancelWatch()
+        if (store.status != Store.RUNNING) cancelWatch(this)
         unregisterReceiver(screenOn)
         handler.post { socket.disconnect() }
         thread.quitSafely()
@@ -157,15 +209,16 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         super.onDestroy()
     }
 
-    /** `false` when the service cannot keep running: not exempt and not in the foreground. */
+    /** `false` when the service cannot keep running: it needs the foreground and Android refused it. */
     private fun decideForeground(config: Config, required: Boolean): Boolean {
-        val exempt = isIgnoringBatteryOptimizations(this)
-        if ((!exempt || required) && !foreground) enterForeground(config)
-        if (exempt && foreground) {
+        val wanted = config.foregroundService && !isIgnoringBatteryOptimizations(this)
+        // Started with startForegroundService, it must call startForeground even to leave it at once.
+        if ((wanted || required) && !foreground) enterForeground(config)
+        if (!wanted && foreground) {
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             foreground = false
         }
-        return exempt || foreground
+        return !wanted || foreground
     }
 
     private fun enterForeground(config: Config?) {
@@ -234,27 +287,6 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         }
     }
 
-    private fun watchIntent(): PendingIntent = PendingIntent.getService(
-        this,
-        0,
-        Intent(this, RealtimePushService::class.java).setAction(ACTION_WATCH),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
-
-    private fun scheduleWatch() {
-        val at = SystemClock.elapsedRealtime() + WATCH_INTERVAL_MS
-        try {
-            (getSystemService(Context.ALARM_SERVICE) as AlarmManager)
-                .setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, watchIntent())
-        } catch (e: Exception) {
-            Log.w(TAG, "watch not scheduled: ${e.javaClass.simpleName}")
-        }
-    }
-
-    private fun cancelWatch() {
-        (getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(watchIntent())
-    }
-
     // Snapshot: signals and joins go through the funnel, one fetch running and one waiting.
 
     private fun requestSnapshot() {
@@ -284,20 +316,32 @@ internal class RealtimePushService : Service(), PhoenixSocket.Listener {
         val c = config ?: return
         val creds = credentials ?: return
         if (stopped) return
-        when (val result = fetchSnapshot(http, c, creds)) {
-            is SnapshotResult.Ok -> {
-                val iconSize = resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_width)
-                if (!stopped) LargeIcons.prefetch(icons, result.snapshot.notifications, iconSize)
-                if (!stopped) shade.apply(result.snapshot, c)
-            }
-            is SnapshotResult.Rejected -> {
-                Log.w(TAG, "the server does not know this device: stopping")
-                store.status = Store.REJECTED
-                shade.clear()
-                stopped = true
-                stopSelf()
-            }
-            is SnapshotResult.Failed -> Log.w(TAG, "snapshot failed: ${result.reason}")
+        if (!readSnapshot(this, http, c, creds, shade, store)) {
+            stopped = true
+            stopSelf()
         }
     }
+}
+
+/**
+ * Reads the snapshot and makes the shade match it. `false` when the server does not know the
+ * pair: the status is then `rejected` and the shade empty. Blocking: off the main thread.
+ */
+internal fun readSnapshot(context: Context, http: OkHttpClient, config: Config, credentials: Credentials, shade: Shade, store: Store): Boolean {
+    when (val result = fetchSnapshot(http, config, credentials)) {
+        is SnapshotResult.Ok -> {
+            val iconSize = context.resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_width)
+            // An https icon never redirects to http.
+            LargeIcons.prefetch(http.newBuilder().followSslRedirects(false).build(), result.snapshot.notifications, iconSize)
+            shade.apply(result.snapshot, config)
+        }
+        is SnapshotResult.Rejected -> {
+            Log.w(TAG, "the server does not know this device: stopping")
+            store.status = Store.REJECTED
+            shade.clear()
+            return false
+        }
+        is SnapshotResult.Failed -> Log.w(TAG, "snapshot failed: ${result.reason}")
+    }
+    return true
 }

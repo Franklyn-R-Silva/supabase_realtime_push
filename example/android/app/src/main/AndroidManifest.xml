@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The direct exemption dialog instead of the settings list. Fine for an APK or a
+         company fleet; on Google Play only for apps that cannot use FCM (see the README). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <application
         android:label="supabase_realtime_push_example"
         android:name="${applicationName}"

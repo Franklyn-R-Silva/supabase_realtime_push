@@ -19,6 +19,8 @@ internal data class Config(
     val smallIcon: String?,
     /** Extra message channels, id to the name users see in settings. */
     val channels: Map<String, String> = emptyMap(),
+    /** False: never the "connected" notification; without the exemption the service then runs only while the app is open. */
+    val foregroundService: Boolean = true,
 )
 
 internal data class Credentials(val topic: String, val secret: String)
@@ -81,6 +83,7 @@ internal class Store(context: Context) {
                 connectedText = prefs.getString("connectedText", null) ?: return null,
                 smallIcon = prefs.getString("smallIcon", null),
                 channels = readMap("channels") { json, id -> json.optString(id) },
+                foregroundService = prefs.getBoolean("foregroundService", true),
             )
         }
         set(value) {
@@ -94,6 +97,7 @@ internal class Store(context: Context) {
                 .putString("connectedText", value?.connectedText)
                 .putString("smallIcon", value?.smallIcon)
                 .putString("channels", value?.channels?.let { JSONObject(it).toString() })
+                .putBoolean("foregroundService", value?.foregroundService ?: true)
                 .commit()
         }
 
