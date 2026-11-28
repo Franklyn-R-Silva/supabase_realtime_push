@@ -5,9 +5,6 @@ description: >-
 version: 0.0.1
 repository: https://github.com/Franklyn-R-Silva/supabase_realtime_push
 issue_tracker: https://github.com/Franklyn-R-Silva/supabase_realtime_push/issues
-# Private until the first release: this stops an accidental `pub publish`.
-# Remove it in the go-public checklist, together with the CI publish dry-run.
-publish_to: none
 screenshots:
   - description: >-
       Your database rings an empty doorbell over Supabase Realtime, and the
